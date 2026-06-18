@@ -453,7 +453,13 @@ const docTemplate = `{
         "server.ClickResp": {
             "type": "object",
             "properties": {
+                "downloaded": {
+                    "type": "string"
+                },
                 "navigated": {
+                    "type": "boolean"
+                },
+                "needs_file": {
                     "type": "boolean"
                 },
                 "ok": {

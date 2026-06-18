@@ -29,4 +29,11 @@ swag init -g main.go --parseInternal -o docs
 
 A `Makefile` wraps these: `make build`, `make docs`.
 
-**Status:** v1 implemented — all endpoints live, smoke-tested against example.com.
+## Tests
+
+```bash
+go test ./...          # unit + functional (functional drives a real browser)
+go test -short ./...   # unit only (no browser)
+```
+
+**Status:** v1 implemented, tested, and hardened — all endpoints live.

@@ -1,0 +1,172 @@
+package browser
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestValidNavURL(t *testing.T) {
+	ok := []string{"http://example.com", "https://x.io/y", "about:blank", "http://localhost:3000"}
+	for _, u := range ok {
+		if err := validNavURL(u); err != nil {
+			t.Errorf("validNavURL(%q) unexpected error: %v", u, err)
+		}
+	}
+	bad := []string{"file:///etc/passwd", "chrome://settings", "javascript:alert(1)", "data:text/html,x", "ftp://x"}
+	for _, u := range bad {
+		if err := validNavURL(u); err == nil {
+			t.Errorf("validNavURL(%q) = nil, want error", u)
+		}
+	}
+}
+
+const testIndexHTML = `<!doctype html><html><body>
+<h1>Test Home</h1>
+<p>marker-text-123</p>
+<a href="/next">Go Next</a>
+<input id="name" type="text" placeholder="yourname">
+<input id="f" type="file" accept="image/*">
+<button id="up" onclick="document.getElementById('f').click()">Choose File</button>
+<a id="dl" href="/file.txt" download>Download File</a>
+</body></html>`
+
+func testServer() *httptest.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(testIndexHTML))
+	})
+	mux.HandleFunc("/next", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<!doctype html><html><body><h1>Next Page</h1></body></html>"))
+	})
+	mux.HandleFunc("/file.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", `attachment; filename="file.txt"`)
+		_, _ = w.Write([]byte("hello-download"))
+	})
+	return httptest.NewServer(mux)
+}
+
+func refByName(els []Element, substr string) string {
+	for _, e := range els {
+		if strings.Contains(e.Name, substr) {
+			return e.Ref
+		}
+	}
+	return ""
+}
+
+func refByKind(els []Element, kind string) string {
+	for _, e := range els {
+		if e.Kind == kind {
+			return e.Ref
+		}
+	}
+	return ""
+}
+
+// TestSessionFunctional drives a real headless browser against a local test
+// server, exercising scan/read/fill/upload/download/click and the click-time
+// download + file-chooser detection. Needs Chromium; skipped under -short.
+func TestSessionFunctional(t *testing.T) {
+	if testing.Short() {
+		t.Skip("needs a browser; skipped in -short")
+	}
+	ts := testServer()
+	defer ts.Close()
+	tmp := t.TempDir()
+
+	s, err := New(ts.URL, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer s.Close()
+
+	els, err := s.Scan()
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(els) == 0 {
+		t.Fatal("Scan returned no elements")
+	}
+
+	// read
+	if _, _, text, err := s.Read(); err != nil {
+		t.Fatalf("Read: %v", err)
+	} else if !strings.Contains(text, "marker-text-123") {
+		t.Errorf("Read missing marker, got: %q", text)
+	}
+
+	// scan kind hints
+	upRef := refByKind(els, "upload")
+	dlRef := refByKind(els, "download")
+	if upRef == "" {
+		t.Error("scan did not tag the file input kind=upload")
+	}
+	if dlRef == "" {
+		t.Error("scan did not tag the download link kind=download")
+	}
+
+	// fill
+	nameRef := refByName(els, "yourname")
+	if nameRef == "" {
+		t.Fatal("name input not found in scan")
+	}
+	if err := s.Fill(nameRef, "alice"); err != nil {
+		t.Fatalf("Fill: %v", err)
+	}
+	if v := s.page.MustEval(`() => document.getElementById('name').value`).Str(); v != "alice" {
+		t.Errorf("fill value = %q, want alice", v)
+	}
+
+	// upload
+	srcFile := filepath.Join(tmp, "up.txt")
+	if err := os.WriteFile(srcFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Upload(upRef, srcFile); err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+	if n := s.page.MustEval(`() => document.getElementById('f').files.length`).Int(); n != 1 {
+		t.Errorf("file input files = %d, want 1", n)
+	}
+
+	// download
+	saved, err := s.Download(dlRef, "")
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	if data, err := os.ReadFile(saved); err != nil {
+		t.Fatalf("read saved download: %v", err)
+	} else if string(data) != "hello-download" {
+		t.Errorf("download content = %q, want hello-download", string(data))
+	}
+
+	// needs_file: clicking the "Choose File" button opens a chooser
+	chooseRef := refByName(els, "Choose File")
+	if chooseRef == "" {
+		t.Fatal("choose-file button not found")
+	}
+	if cr, err := s.Click(chooseRef); err != nil {
+		t.Fatalf("Click(choose): %v", err)
+	} else if !cr.NeedsFile {
+		t.Error("click on file-chooser button did not report needs_file")
+	}
+
+	// navigation (last — it leaves the page)
+	nextRef := refByName(els, "Go Next")
+	if nextRef == "" {
+		t.Fatal("link not found")
+	}
+	if cr, err := s.Click(nextRef); err != nil {
+		t.Fatalf("Click(link): %v", err)
+	} else if !cr.Navigated || !strings.Contains(cr.URL, "/next") {
+		t.Errorf("click link: navigated=%v url=%q", cr.Navigated, cr.URL)
+	}
+}

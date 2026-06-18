@@ -50,9 +50,11 @@ type ReadResp struct {
 }
 
 type ClickResp struct {
-	OK        bool   `json:"ok"`
-	Navigated bool   `json:"navigated,omitempty"`
-	URL       string `json:"url,omitempty"`
+	OK         bool   `json:"ok"`
+	Navigated  bool   `json:"navigated,omitempty"`
+	URL        string `json:"url,omitempty"`
+	Downloaded string `json:"downloaded,omitempty"`
+	NeedsFile  bool   `json:"needs_file,omitempty"`
 }
 
 type GotoResp struct {

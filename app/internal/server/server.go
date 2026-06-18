@@ -85,19 +85,59 @@ func listen(port int) (net.Listener, int, error) {
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
-	mux.HandleFunc("/status", s.handleStatus)
-	mux.HandleFunc("/scan", s.handleScan)
-	mux.HandleFunc("/read", s.handleRead)
-	mux.HandleFunc("/snap", s.handleSnap)
-	mux.HandleFunc("/goto", s.handleGoto)
-	mux.HandleFunc("/click", s.handleClick)
-	mux.HandleFunc("/fill", s.handleFill)
-	mux.HandleFunc("/upload", s.handleUpload)
-	mux.HandleFunc("/download", s.handleDownload)
-	mux.HandleFunc("/batch", s.handleBatch)
-	mux.HandleFunc("/shutdown", s.handleShutdown)
-	mux.Handle("/swagger/", httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json")))
-	mux.HandleFunc("/", s.handleRoot)
+	mux.HandleFunc("/status", s.route(http.MethodGet, s.handleStatus))
+	mux.HandleFunc("/scan", s.route(http.MethodGet, s.handleScan))
+	mux.HandleFunc("/read", s.route(http.MethodGet, s.handleRead))
+	mux.HandleFunc("/snap", s.route(http.MethodGet, s.handleSnap))
+	mux.HandleFunc("/goto", s.route(http.MethodPost, s.handleGoto))
+	mux.HandleFunc("/click", s.route(http.MethodPost, s.handleClick))
+	mux.HandleFunc("/fill", s.route(http.MethodPost, s.handleFill))
+	mux.HandleFunc("/upload", s.route(http.MethodPost, s.handleUpload))
+	mux.HandleFunc("/download", s.route(http.MethodPost, s.handleDownload))
+	mux.HandleFunc("/batch", s.route(http.MethodPost, s.handleBatch))
+	mux.HandleFunc("/shutdown", s.route(http.MethodPost, s.handleShutdown))
+	mux.Handle("/swagger/", s.secure(httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json"))))
+	mux.HandleFunc("/", s.secure(s.handleRoot))
+}
+
+// secure rejects requests that aren't local (DNS-rebinding guard) or are
+// cross-site browser requests (CSRF guard). Non-browser clients (curl, agents,
+// the Swagger UI itself) send no cross-site Sec-Fetch-Site header and pass
+// through, so the JSON API UX is unchanged.
+func (s *Server) secure(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !localHost(r.Host) {
+			http.Error(w, "forbidden: non-local host", http.StatusForbidden)
+			return
+		}
+		switch r.Header.Get("Sec-Fetch-Site") {
+		case "", "same-origin", "none":
+			h(w, r)
+		default:
+			http.Error(w, "forbidden: cross-site request", http.StatusForbidden)
+		}
+	}
+}
+
+// route wraps secure and pins the HTTP method.
+func (s *Server) route(method string, h http.HandlerFunc) http.HandlerFunc {
+	return s.secure(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != method {
+			w.Header().Set("Allow", method)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		h(w, r)
+	})
+}
+
+// localHost reports whether the Host header points at the loopback interface.
+func localHost(host string) bool {
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		h = host
+	}
+	return h == "localhost" || h == "127.0.0.1" || h == "::1"
 }
 
 // --- helpers ---
@@ -220,14 +260,21 @@ func (s *Server) handleClick(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	nav, u, err := s.sess.Click(b.Ref)
+	cr, err := s.sess.Click(b.Ref)
 	if err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	res := ClickResp{OK: true, Navigated: nav}
-	if nav {
-		res.URL = u
+	if cr.NeedsFile {
+		writeJSON(w, http.StatusOK, ClickResp{NeedsFile: true})
+		return
+	}
+	res := ClickResp{OK: true, Navigated: cr.Navigated}
+	if cr.Navigated {
+		res.URL = cr.URL
+	}
+	if cr.Downloaded != "" {
+		res.Downloaded = cr.Downloaded
 	}
 	writeJSON(w, http.StatusOK, res)
 }

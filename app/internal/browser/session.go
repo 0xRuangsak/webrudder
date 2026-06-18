@@ -6,14 +6,17 @@
 // node with a `data-wr-ref` attribute and the ref is resolved back to the live
 // element by that attribute. The DOM itself is the ref store, so refs survive
 // until the next scan or a navigation rewrites the page.
+//
+// A background watcher turns two CDP signals into channels so a plain click can
+// report what it caused: file-chooser interception (→ needs_file) and download
+// progress (→ downloaded path).
 package browser
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -32,6 +35,12 @@ type Session struct {
 	launcher  *launcher.Launcher
 	page      *rod.Page
 	downloads string
+
+	chooser chan struct{} // a click opened a file chooser
+	dlBegin chan struct{} // a download started
+	dlDone  chan string   // a download finished → saved path
+	dlMu    sync.Mutex
+	dlNames map[string]string // download GUID → suggested filename
 }
 
 // Element is one actionable node returned by scan.
@@ -45,6 +54,14 @@ type Element struct {
 	Accept string `json:"accept,omitempty"` // file input accept attribute
 }
 
+// ClickResult describes what a click caused.
+type ClickResult struct {
+	Navigated  bool
+	URL        string
+	Downloaded string // saved path if the click triggered a download
+	NeedsFile  bool   // the click opened a file chooser (use Upload)
+}
+
 // Action is one step in a /batch request.
 type Action struct {
 	Do   string `json:"do"`
@@ -55,7 +72,7 @@ type Action struct {
 }
 
 // New launches headless Chromium (rod auto-downloads the binary on first run),
-// opens a page, and navigates to entryURL when given.
+// opens a page, starts the event watcher, and navigates to entryURL when given.
 func New(entryURL, downloadsDir string) (*Session, error) {
 	if downloadsDir == "" {
 		downloadsDir = filepath.Join(os.TempDir(), "webrudder-downloads")
@@ -83,7 +100,18 @@ func New(entryURL, downloadsDir string) (*Session, error) {
 		return nil, fmt.Errorf("open page: %w", err)
 	}
 
-	s := &Session{browser: b, launcher: l, page: page, downloads: downloadsDir}
+	s := &Session{
+		browser:   b,
+		launcher:  l,
+		page:      page,
+		downloads: downloadsDir,
+		chooser:   make(chan struct{}, 8),
+		dlBegin:   make(chan struct{}, 8),
+		dlDone:    make(chan string, 8),
+		dlNames:   map[string]string{},
+	}
+	s.startWatchers()
+
 	if entryURL != "" {
 		if err := s.Goto(entryURL); err != nil {
 			s.Close()
@@ -91,6 +119,84 @@ func New(entryURL, downloadsDir string) (*Session, error) {
 		}
 	}
 	return s, nil
+}
+
+// startWatchers enables file-chooser interception and download events, then
+// spawns goroutines that translate those CDP events into channel signals. The
+// goroutines exit when the page/browser context is cancelled by Close.
+func (s *Session) startWatchers() {
+	_ = proto.PageSetInterceptFileChooserDialog{Enabled: true}.Call(s.page)
+	_ = proto.BrowserSetDownloadBehavior{
+		Behavior:         proto.BrowserSetDownloadBehaviorBehaviorAllowAndName,
+		BrowserContextID: s.browser.BrowserContextID,
+		DownloadPath:     s.downloads,
+	}.Call(s.browser)
+
+	// File chooser is a page-level event.
+	go s.page.EachEvent(func(e *proto.PageFileChooserOpened) {
+		signal(s.chooser)
+	})()
+
+	// Download lifecycle is a browser-level event (saved as GUID, renamed to the
+	// suggested filename on completion).
+	go s.browser.EachEvent(
+		func(e *proto.PageDownloadWillBegin) {
+			s.dlMu.Lock()
+			s.dlNames[e.GUID] = e.SuggestedFilename
+			s.dlMu.Unlock()
+			signal(s.dlBegin)
+		},
+		func(e *proto.PageDownloadProgress) {
+			if e.State != proto.PageDownloadProgressStateCompleted {
+				return
+			}
+			s.dlMu.Lock()
+			name := s.dlNames[e.GUID]
+			delete(s.dlNames, e.GUID)
+			s.dlMu.Unlock()
+
+			saved := filepath.Join(s.downloads, e.GUID)
+			// filepath.Base strips any path components the page may have smuggled
+			// into the suggested filename (e.g. "../../.bashrc").
+			if name = filepath.Base(name); name != "" && name != "." && name != ".." {
+				dst := filepath.Join(s.downloads, name)
+				if os.Rename(saved, dst) == nil {
+					saved = dst
+				}
+			}
+			select {
+			case s.dlDone <- saved:
+			default:
+			}
+		},
+	)()
+}
+
+func signal(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+func drain(ch chan struct{}) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
+func drainStr(ch chan string) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
 }
 
 // Close tears down the browser and removes the launcher's temp data.
@@ -104,8 +210,8 @@ func (s *Session) Close() {
 }
 
 // settle waits (bounded) for the page to finish loading and go quiet after an
-// action, so the next read sees the new state. Timeouts are swallowed on
-// purpose — a slow/animated page should not hang the API.
+// action. Timeouts are swallowed on purpose — a slow/animated page should not
+// hang the API.
 func (s *Session) settle() {
 	_ = rod.Try(func() { s.page.Timeout(5 * time.Second).MustWaitLoad() })
 	_ = rod.Try(func() { s.page.Timeout(3 * time.Second).MustWaitStable() })
@@ -126,8 +232,31 @@ func (s *Session) info() (pageURL, title string) {
 	return info.URL, info.Title
 }
 
+// validNavURL allows only http/https (and about:blank). Other schemes — file,
+// chrome, data, javascript — are rejected: webrudder is a web automation tool
+// and allowing them invites local-file disclosure. Loopback/private hosts are
+// intentionally NOT blocked (testing local apps is the primary use case).
+func validNavURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid url: %w", err)
+	}
+	switch u.Scheme {
+	case "http", "https":
+		return nil
+	case "about":
+		if raw == "about:blank" {
+			return nil
+		}
+	}
+	return fmt.Errorf("unsupported url scheme %q — only http and https are allowed", u.Scheme)
+}
+
 // Goto navigates to an absolute URL (explicit jump; normal navigation is by clicking).
 func (s *Session) Goto(rawURL string) error {
+	if err := validNavURL(rawURL); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.page.Navigate(rawURL); err != nil {
@@ -230,21 +359,48 @@ func (s *Session) elem(ref string) (*rod.Element, error) {
 	return el, nil
 }
 
-// Click clicks an element and reports whether the URL changed.
-func (s *Session) Click(ref string) (navigated bool, newURL string, err error) {
+// Click clicks an element and reports what it caused: navigation, a download, or
+// a file chooser opening (needs_file).
+func (s *Session) Click(ref string) (ClickResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var res ClickResult
 	el, err := s.elem(ref)
 	if err != nil {
-		return false, "", err
+		return res, err
 	}
+
+	drain(s.chooser)
+	drain(s.dlBegin)
+	drainStr(s.dlDone)
+
 	before, _ := s.info()
 	if err := el.Click(proto.InputMouseButtonLeft, 1); err != nil {
-		return false, "", fmt.Errorf("click: %w", err)
+		return res, fmt.Errorf("click: %w", err)
 	}
 	s.settle()
 	after, _ := s.info()
-	return after != before, after, nil
+	res.Navigated = after != before
+	res.URL = after
+
+	select {
+	case <-s.chooser:
+		res.NeedsFile = true
+	default:
+	}
+
+	// If a download started, wait (bounded) for it to finish; otherwise no penalty.
+	select {
+	case <-s.dlBegin:
+		select {
+		case p := <-s.dlDone:
+			res.Downloaded = p
+		case <-time.After(30 * time.Second):
+		}
+	default:
+	}
+
+	return res, nil
 }
 
 // Fill replaces the value of an input/textarea with text.
@@ -297,8 +453,8 @@ func isFileInput(el *rod.Element) bool {
 }
 
 // Download clicks an element that triggers a download, waits for it to finish,
-// and writes the bytes into dir (or the session default), returning the path.
-func (s *Session) Download(ref, dir string) (saved string, err error) {
+// and returns the saved path (moved into dir when dir differs from the default).
+func (s *Session) Download(ref, dir string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if dir == "" {
@@ -312,40 +468,23 @@ func (s *Session) Download(ref, dir string) (saved string, err error) {
 		return "", err
 	}
 
-	name := downloadName(el)
-	wait := s.browser.MustWaitDownload()
+	drainStr(s.dlDone)
 	if err := el.Click(proto.InputMouseButtonLeft, 1); err != nil {
 		return "", fmt.Errorf("download click: %w", err)
 	}
 
-	done := make(chan []byte, 1)
-	go func() {
-		defer func() { _ = recover() }()
-		done <- wait()
-	}()
 	select {
-	case data := <-done:
-		saved = filepath.Join(dir, name)
-		if err := os.WriteFile(saved, data, 0o644); err != nil {
-			return "", fmt.Errorf("save download: %w", err)
+	case saved := <-s.dlDone:
+		if dir != s.downloads {
+			dst := filepath.Join(dir, filepath.Base(saved))
+			if os.Rename(saved, dst) == nil {
+				saved = dst
+			}
 		}
 		return saved, nil
 	case <-time.After(30 * time.Second):
 		return "", fmt.Errorf("download timed out — did the click trigger a download?")
 	}
-}
-
-// downloadName derives a filename from the element's href, falling back to a default.
-func downloadName(el *rod.Element) string {
-	if h, err := el.Attribute("href"); err == nil && h != nil && *h != "" {
-		if u, err := url.Parse(*h); err == nil {
-			base := path.Base(u.Path)
-			if base != "" && base != "/" && base != "." {
-				return base
-			}
-		}
-	}
-	return "download.bin"
 }
 
 // Batch runs a sequence of actions, returning one result object per action.
@@ -357,12 +496,19 @@ func (s *Session) Batch(actions []Action) []map[string]any {
 		var err error
 		switch a.Do {
 		case "click":
-			var nav bool
-			var u string
-			if nav, u, err = s.Click(a.Ref); err == nil {
-				r["navigated"] = nav
-				if nav {
-					r["url"] = u
+			var cr ClickResult
+			if cr, err = s.Click(a.Ref); err == nil {
+				r["navigated"] = cr.Navigated
+				if cr.Navigated {
+					r["url"] = cr.URL
+				}
+				if cr.Downloaded != "" {
+					r["downloaded"] = cr.Downloaded
+				}
+				if cr.NeedsFile {
+					r["ok"] = false
+					r["needs_file"] = true
+					r["error"] = "click opened a file chooser — use upload"
 				}
 			}
 		case "fill":

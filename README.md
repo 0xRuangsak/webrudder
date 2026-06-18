@@ -140,7 +140,7 @@ Base URL: `http://localhost:<port>`
 | `POST /batch` | `{actions:[…]}` | `{ok, results:[…]}` — many actions, one request |
 | `POST /shutdown` | — | stops the daemon and browser |
 
-Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status. The full schema lives in the OpenAPI spec that drives Swagger UI at `/`. (v1: `/click` returns `navigated`/`url`; `downloaded`/`needs_file` auto-detection is planned — see Status.)
+Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status. The full schema lives in the OpenAPI spec that drives Swagger UI at `/`. `/click` reports `navigated`/`url`, plus `downloaded` (saved path) or `needs_file` when a click triggers a download or opens a file chooser.
 
 ### scan output
 
@@ -216,6 +216,21 @@ $ curl -X POST localhost:10000/download -d '{"ref":"e7"}'
 
 ---
 
+## Security
+
+webrudder is a local tool that drives a real browser and reads/writes local files as you — so access to its port is sensitive. Defenses:
+
+- **Local only.** Binds `127.0.0.1`, never `0.0.0.0`.
+- **DNS-rebinding guard.** Requests whose `Host` isn't `localhost` / `127.0.0.1` / `::1` are rejected.
+- **CSRF guard.** Cross-site browser requests (`Sec-Fetch-Site: cross-site`) are rejected. curl, scripts, agents, and the Swagger UI send no cross-site header, so they're unaffected.
+- **Method pinning.** Each route accepts exactly one HTTP method.
+- **Navigation allowlist.** `/goto` accepts only `http`/`https` (no `file://`, `chrome://`, …). Loopback/private hosts stay allowed — testing local apps is the point.
+- **Download path safety.** Page-supplied filenames are reduced with `filepath.Base`, so a malicious page can't traverse out of the downloads dir.
+
+By design, `/upload` can attach any local file (the tool acts as you, like `curl -F`); the guards above keep a remote or web page from reaching the API. For multi-user or network-exposed setups, front it with an authenticating reverse proxy.
+
+---
+
 ## Stack
 
 - **Go** — single static binary, trivial cross-compile, goroutines for the concurrent CDP event loop and HTTP handlers.
@@ -252,11 +267,11 @@ Core decisions resolved — see **Status**. New questions get tracked here as th
 
 ## Status
 
-**v1 implemented and smoke-tested.** The daemon launches headless Chromium (rod, auto-downloaded), serves the API + embedded Swagger UI, and tracks page state. Verified end-to-end against example.com: `status` / `scan` / `read` / `click` (navigation tracked) / `snap` / graceful shutdown, plus Swagger UI at `/`.
+**v1 implemented, tested, and hardened.** The daemon launches headless Chromium (rod, auto-downloaded), serves the API + embedded Swagger UI, tracks page state, and detects what each click causes. Covered by unit + functional tests (`go test ./...` — the functional suite drives a real browser) and live-smoke-tested end to end.
 
-**Implemented:** `/status /scan /read /snap /goto /click /fill /upload /download /batch /shutdown`; port default `10000` with auto-increment + `--port` / `--port 0`; `--downloads` dir; embedded Swagger UI.
+**Implemented:** `/status /scan /read /snap /goto /click /fill /upload /download /batch /shutdown`; port default `10000` (auto-increment, `--port`, `--port 0`); `--downloads` dir; embedded Swagger UI. `/click` reports `navigated` / `downloaded` / `needs_file`.
 
-**v1 caveats:** `/click` reports `navigated`/`url`; auto-detecting `downloaded`/`needs_file` on a plain click is not wired yet — use `/download` and `/upload` explicitly. `/upload` resolves the page's file input directly (no chooser interception needed for the common case).
+**Security:** binds `127.0.0.1` only; Host-header allowlist + `Sec-Fetch-Site` CSRF guard; per-route HTTP method pinning; `/goto` restricted to http/https; download filenames sanitized against traversal. See [Security](#security).
 
 **Locked (design):** Go + rod/CDP engine in `app/`; static Bootstrap landing in `web/`; HTTP API + Swagger UI on one port; text-first `scan`/`read`; browses-doesn't-judge (no assertions). Headed / mirror / screencast modes dropped.
 
