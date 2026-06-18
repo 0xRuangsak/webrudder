@@ -9,6 +9,7 @@ See the [root README](../README.md) for the full design, API reference, and open
 ```bash
 go build -o webrudder .            # build the binary
 ./webrudder https://example.com   # launch on :10000 (entry URL optional)
+# or: make run URL=https://example.com PORT=10000
 ```
 
 First launch auto-downloads a Chromium build (~150 MB, cached in `~/.cache/rod`). Then open <http://localhost:10000/> for Swagger UI, or drive the API directly:

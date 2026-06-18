@@ -95,7 +95,7 @@ Element refs (`e1`, `e2`, …) are stable for the **current** page. After naviga
 ## Launch Flags
 
 ```bash
-./webrudder <url> [--port N] [--downloads DIR]
+./webrudder [--port N] [--downloads DIR] <url>
 ```
 
 | Flag | Default | Meaning |
@@ -103,7 +103,7 @@ Element refs (`e1`, `e2`, …) are stable for the **current** page. After naviga
 | `--port N` | `10000` | HTTP port. Auto-increments if busy. `--port 0` = OS-assigned free port. |
 | `--downloads DIR` | session temp dir | where downloaded files are saved |
 
-`<url>` is optional — omit it to start on a blank page, then `POST /goto`.
+Flags must come **before** the URL (Go's `flag` package stops parsing at the first positional argument). `<url>` is optional — omit it to start on a blank page, then `POST /goto`.
 
 ---
 
@@ -112,8 +112,8 @@ Element refs (`e1`, `e2`, …) are stable for the **current** page. After naviga
 Each `webrudder` is one browser on one port. Run as many as you like, side by side:
 
 ```bash
-./webrudder https://example.com   --port 10000
-./webrudder https://example2.com  --port 10001
+./webrudder --port 10000 https://example.com
+./webrudder --port 10001 https://example2.com
 ```
 
 - Default `10000`, auto-incrementing to the next free port if busy. The chosen port is printed on start.
