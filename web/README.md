@@ -1,7 +1,7 @@
-# webrudder — website
+# webrudder — web
 
-Landing page for webrudder. Static marketing site, deployed separately — **not** part of the running daemon.
+Landing page for webrudder. Static marketing site (Bootstrap via CDN — no build step), deployed separately — **not** part of the running daemon. Content mirrors the [root README](../README.md).
 
-See the [root README](../README.md) for the product overview.
+**View:** open `index.html` in a browser, or serve the folder with any static server (`python3 -m http.server`).
 
-**Status:** not built yet.
+**Status:** first Bootstrap pass.

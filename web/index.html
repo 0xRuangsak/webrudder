@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>webrudder — fast, lightweight browser automation for LLM agents</title>
+  <meta name="description" content="Launch a headless browser bound to a local port, then drive it over a plain HTTP API — with an interactive Swagger UI console at the root.">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <style>
+    :root { --wr-ink: #0d1117; --wr-accent: #2dd4bf; }
+    html { scroll-behavior: smooth; scroll-padding-top: 4rem; }
+    body { color: #1f2328; }
+    .hero {
+      background: radial-gradient(1200px 500px at 70% -10%, #134e4a 0%, transparent 60%), var(--wr-ink);
+      color: #e6edf3;
+    }
+    .hero .lead { color: #aeb9c4; }
+    .accent { color: var(--wr-accent); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre.code {
+      background: var(--wr-ink); color: #e6edf3; border-radius: .6rem;
+      padding: 1rem 1.25rem; overflow-x: auto; font-size: .875rem; line-height: 1.5;
+    }
+    pre.code .cmt { color: #7d8590; }
+    .section { padding: 4.5rem 0; }
+    .border-accent { border-left: 3px solid var(--wr-accent); }
+    .table code { white-space: nowrap; }
+    footer { background: var(--wr-ink); color: #aeb9c4; }
+    .navbar-brand b { letter-spacing: -.02em; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar navbar-expand-md navbar-dark bg-dark sticky-top">
+    <div class="container">
+      <a class="navbar-brand" href="#top"><b>web<span class="accent">rudder</span></b></a>
+      <div class="ms-auto d-flex gap-3">
+        <a class="nav-link d-inline" href="#quickstart">Quickstart</a>
+        <a class="nav-link d-inline" href="#api">API</a>
+        <a class="nav-link d-inline" href="https://github.com/0xRuangsak/webrudder">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <header id="top" class="hero">
+    <div class="container py-5">
+      <div class="row py-5">
+        <div class="col-lg-9">
+          <h1 class="display-4 fw-bold mb-3">Fast, lightweight browser automation for LLM agents.</h1>
+          <p class="lead fs-4 mb-4">
+            Launch a headless browser bound to a local port, then drive it over a plain HTTP API —
+            with an interactive <span class="accent">Swagger UI</span> console at the root.
+          </p>
+          <div class="d-flex flex-wrap gap-2 mb-4">
+            <span class="badge text-bg-secondary">Go + CDP</span>
+            <span class="badge text-bg-secondary">Single static binary</span>
+            <span class="badge text-bg-secondary">Text-first</span>
+            <span class="badge text-bg-secondary">No Playwright</span>
+            <span class="badge text-bg-secondary">No MCP</span>
+          </div>
+          <a href="#quickstart" class="btn btn-lg" style="background:var(--wr-accent);color:#06302b;font-weight:600">Get started</a>
+          <a href="https://github.com/0xRuangsak/webrudder" class="btn btn-lg btn-outline-light">View on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- What it is -->
+  <section class="section" id="what">
+    <div class="container">
+      <div class="row">
+        <div class="col-lg-8">
+          <h2 class="fw-bold mb-3">What it is</h2>
+          <p class="fs-5">
+            <code>webrudder &lt;url&gt;</code> starts a local daemon: it launches a headless Chromium at that URL
+            and serves it on a localhost port. Agents and scripts drive it through an <strong>HTTP API</strong>;
+            visiting the root serves <strong>Swagger UI</strong> — an interactive list of every endpoint with a
+            try-it-out console. Navigation happens by <em>interacting</em> (clicking links and buttons); the daemon
+            is a state machine that tracks the current URL, DOM, and element map. Close the terminal and the
+            browser dies with it.
+          </p>
+          <p class="text-muted">No bundled browser bloat. No per-step screenshots. No MCP layer. One static binary talking to Chromium over CDP.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why -->
+  <section class="section bg-light" id="why">
+    <div class="container">
+      <h2 class="fw-bold mb-3">Why it's fast</h2>
+      <p class="fs-5 mb-4" style="max-width:48rem">
+        Driving a browser through an LLM is slow when every step round-trips a screenshot: the model waits on
+        inference, parses ~1.5k image tokens, then acts — and repeats. The engine speed was never the bottleneck;
+        the protocol is. webrudder cuts the loop two ways.
+      </p>
+      <div class="row g-4">
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title">Text-first state</h5>
+              <p class="card-text"><code>GET /scan</code> returns a compact list of actionable elements
+                (<code>e1 button "Login"</code>). The model acts by ref-id with no vision and ~50 tokens
+                instead of ~1500.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title">Batchable</h5>
+              <p class="card-text">Many actions in one request (<code>POST /batch</code>) collapse N round-trips
+                into one — a whole form fills and submits in a single call.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section" id="how">
+    <div class="container">
+      <h2 class="fw-bold mb-4">How it works</h2>
+      <pre class="code">Terminal:  ./webrudder https://example.com
+                 ↓
+   Daemon launches headless Chromium (over CDP)
+   and serves http://localhost:10000
+                 ↓
+   Humans → open localhost:10000 → Swagger UI (endpoint list + try-it-out)
+   Agents → GET /scan · POST /click · GET /read ...
+                 ↓
+   Daemon = state machine: current URL + DOM + element map.
+   Clicking navigates; re-scan for the new page's elements.
+                 ↓
+   Close terminal → daemon + Chromium die cleanly</pre>
+      <p class="text-muted mt-3">The URL passed at launch is just the entry point — after that you move around by interacting; you never re-feed URLs to navigate.</p>
+    </div>
+  </section>
+
+  <!-- Interfaces -->
+  <section class="section bg-light" id="interfaces">
+    <div class="container">
+      <h2 class="fw-bold mb-4">Two surfaces, one browser</h2>
+      <div class="table-responsive">
+        <table class="table align-middle bg-white">
+          <thead>
+            <tr><th>Surface</th><th>URL</th><th>For</th><th>What it does</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Swagger UI</strong></td>
+              <td><code>localhost:10000/</code></td>
+              <td>humans</td>
+              <td>interactive endpoint list + try-it-out console</td>
+            </tr>
+            <tr>
+              <td><strong>HTTP API</strong></td>
+              <td><code>localhost:10000/scan</code>, <code>/click</code>, …</td>
+              <td>agents / scripts</td>
+              <td>programmatic control, JSON in and out</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted">Both hit the same state machine — a try-it-out call and an agent's <code>/click</code> act on one live browser. Swagger UI is generated from the API's OpenAPI spec, the single source of truth for every endpoint.</p>
+    </div>
+  </section>
+
+  <!-- Quickstart -->
+  <section class="section" id="quickstart">
+    <div class="container">
+      <h2 class="fw-bold mb-4">Quickstart</h2>
+      <p class="fs-5">Start it in one terminal:</p>
+      <pre class="code">$ ./webrudder https://example.com
+webrudder · http://localhost:10000 · chromium pid 4821 · ctrl-c to quit</pre>
+      <p class="fs-5 mt-4">Drive it via the API — curl, an agent, or a script:</p>
+      <pre class="code">$ curl localhost:10000/scan
+{"elements":[{"ref":"e1","role":"link","name":"More information","href":"..."}]}
+
+$ curl -X POST localhost:10000/click -d '{"ref":"e1"}'
+{"ok":true,"navigated":true,"url":"https://www.iana.org/help/example-domains"}</pre>
+      <p class="text-muted mt-3">Or open <code>http://localhost:10000/</code> for Swagger UI — browse every endpoint and fire requests live.</p>
+    </div>
+  </section>
+
+  <!-- API -->
+  <section class="section bg-light" id="api">
+    <div class="container">
+      <h2 class="fw-bold mb-4">API</h2>
+      <p>Base URL: <code>http://localhost:&lt;port&gt;</code></p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle bg-white">
+          <thead>
+            <tr><th>Method &amp; Path</th><th>Body</th><th>Returns</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>GET /scan</code></td><td>—</td><td>actionable elements <code>[{ref, role, name, kind?}]</code></td></tr>
+            <tr><td><code>GET /read</code></td><td>—</td><td><code>{url, title, text}</code></td></tr>
+            <tr><td><code>GET /snap</code></td><td>—</td><td>PNG bytes; <code>POST /snap {path}</code> saves and returns <code>{path}</code></td></tr>
+            <tr><td><code>GET /status</code></td><td>—</td><td><code>{url, title, port}</code></td></tr>
+            <tr><td><code>POST /click</code></td><td><code>{ref}</code></td><td><code>{ok, navigated?, downloaded?, needs_file?}</code></td></tr>
+            <tr><td><code>POST /fill</code></td><td><code>{ref, text}</code></td><td><code>{ok}</code></td></tr>
+            <tr><td><code>POST /goto</code></td><td><code>{url}</code></td><td><code>{ok, url}</code></td></tr>
+            <tr><td><code>POST /upload</code></td><td><code>{ref, file}</code></td><td>clicks, intercepts the file chooser, injects the file</td></tr>
+            <tr><td><code>POST /download</code></td><td><code>{ref, dir?}</code></td><td>clicks, waits, returns the saved path</td></tr>
+            <tr><td><code>POST /batch</code></td><td><code>{actions:[…]}</code></td><td>many actions, one request</td></tr>
+            <tr><td><code>POST /shutdown</code></td><td>—</td><td>stops the daemon and browser</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Principles -->
+  <section class="section" id="principles">
+    <div class="container">
+      <h2 class="fw-bold mb-4">Design principles</h2>
+      <div class="row g-4">
+        <div class="col-md-6"><div class="ps-3 border-accent">
+          <h6 class="fw-bold">Browses, doesn't judge</h6>
+          <p class="text-muted mb-0">It navigates, interacts, and extracts. It does not assert — the caller reads back text / url / elements and decides pass/fail.</p>
+        </div></div>
+        <div class="col-md-6"><div class="ps-3 border-accent">
+          <h6 class="fw-bold">Text-first</h6>
+          <p class="text-muted mb-0"><code>scan</code> + <code>read</code> return cheap text; screenshots only on demand. No vision tokens per step.</p>
+        </div></div>
+        <div class="col-md-6"><div class="ps-3 border-accent">
+          <h6 class="fw-bold">Lightweight</h6>
+          <p class="text-muted mb-0">No bundled browser, no driver layer — a thin CDP client and a single static binary. Chromium is fetched once, not embedded.</p>
+        </div></div>
+        <div class="col-md-6"><div class="ps-3 border-accent">
+          <h6 class="fw-bold">Stateful</h6>
+          <p class="text-muted mb-0">A long-running daemon holds the live browser, so requests operate on evolving page state. Close the terminal and everything dies cleanly.</p>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="py-5">
+    <div class="container d-flex flex-wrap justify-content-between align-items-center">
+      <span><b>web<span class="accent">rudder</span></b> · MIT License</span>
+      <a class="link-light" href="https://github.com/0xRuangsak/webrudder">github.com/0xRuangsak/webrudder</a>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+</body>
+</html>

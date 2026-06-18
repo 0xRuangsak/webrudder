@@ -1,12 +1,12 @@
 # webrudder
 
-> Fast, lightweight browser automation for LLM agents. Launch a headless browser bound to a local port, then drive it two ways — a live web UI or a plain HTTP API.
+> Fast, lightweight browser automation for LLM agents. Launch a headless browser bound to a local port, then drive it over a plain HTTP API — with an interactive Swagger UI console at the root.
 
 ---
 
 ## What It Is
 
-`webrudder <url>` starts a local daemon (the `app/` engine): it launches a headless Chromium at that URL and serves it on a localhost port. The same live browser is reachable two ways — a **web UI** you open in your own browser, and an **HTTP API** for agents and scripts. Navigation happens by *interacting* (clicking links and buttons); the daemon is a state machine that tracks the current URL, DOM, and element map. Close the terminal and the browser dies with it.
+`webrudder <url>` starts a local daemon (the `app/` engine): it launches a headless Chromium at that URL and serves it on a localhost port. Agents and scripts drive it through an **HTTP API**; visiting the root serves **Swagger UI** — an interactive list of every endpoint with a try-it-out console. Navigation happens by *interacting* (clicking links and buttons); the daemon is a state machine that tracks the current URL, DOM, and element map. Close the terminal and the browser dies with it.
 
 No bundled browser bloat. No per-step screenshots. No MCP layer. One static binary talking to Chromium over CDP.
 
@@ -16,8 +16,8 @@ No bundled browser bloat. No per-step screenshots. No MCP layer. One static bina
 
 ```text
 webrudder/
-├── app/        # engine — Go daemon + headless Chromium (CDP) → HTTP API + web UI
-├── website/    # landing page (static marketing site) — not part of the daemon
+├── app/        # engine — Go daemon + headless Chromium (CDP) → HTTP API + Swagger UI
+├── web/        # landing page (static marketing site) — not part of the daemon
 └── README.md   # plan / overview (this file)
 ```
 
@@ -25,14 +25,12 @@ webrudder/
 
 ## Interfaces
 
-The daemon serves one live browser through two surfaces on the same port:
-
 | Surface | URL | For | What it does |
 | --- | --- | --- | --- |
-| **Web UI** | `http://localhost:10000/` | humans | live control panel — view the current page and click it visually |
+| **Swagger UI** | `http://localhost:10000/` | humans | interactive endpoint list + try-it-out console |
 | **HTTP API** | `http://localhost:10000/scan`, `/click`, … | agents / scripts | programmatic control, JSON in and out |
 
-Both act on the **same state machine**: a click in the UI shows up in the next `/scan`, and an API `/click` updates what the UI displays. One browser, two control surfaces.
+Both hit the **same state machine**: a try-it-out call from Swagger UI and an agent's `/click` act on one live browser. Swagger UI is generated from the API's OpenAPI spec — the single source of truth for every endpoint.
 
 ---
 
@@ -53,7 +51,7 @@ Terminal:  ./webrudder https://example.com
    Daemon launches headless Chromium (over CDP)
    and serves http://localhost:10000
                  ↓
-   Humans → open localhost:10000 in a browser (live UI)
+   Humans → open localhost:10000 → Swagger UI (endpoint list + try-it-out)
    Agents → GET /scan · POST /click · GET /read ...
                  ↓
    Daemon = state machine: current URL + DOM + element map.
@@ -88,7 +86,7 @@ $ curl -X POST localhost:10000/click -d '{"ref":"e1"}'
 {"ok":true,"navigated":true,"url":"https://www.iana.org/help/example-domains"}
 ```
 
-Or open `http://localhost:10000/` in your browser for the live UI.
+Or open `http://localhost:10000/` for Swagger UI — browse every endpoint and fire requests live.
 
 Element refs (`e1`, `e2`, …) are stable for the **current** page. After navigating, call `/scan` again to get the new page's refs.
 
@@ -97,14 +95,13 @@ Element refs (`e1`, `e2`, …) are stable for the **current** page. After naviga
 ## Launch Flags
 
 ```bash
-./webrudder <url> [--port N] [--downloads DIR] [--headed]
+./webrudder <url> [--port N] [--downloads DIR]
 ```
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--port N` | `10000` | HTTP port. Auto-increments if busy. `--port 0` = OS-assigned free port. |
 | `--downloads DIR` | session temp dir | where downloaded files are saved |
-| `--headed` | off | launch a visible Chromium window (for debugging) |
 
 `<url>` is optional — omit it to start on a blank page, then `POST /goto`.
 
@@ -143,7 +140,7 @@ Base URL: `http://localhost:<port>`
 | `POST /batch` | `{actions:[…]}` | `{ok, results:[…]}` — many actions, one request |
 | `POST /shutdown` | — | stops the daemon and browser |
 
-Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status.
+Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status. The full schema lives in the OpenAPI spec that drives Swagger UI at `/`.
 
 ### scan output
 
@@ -223,17 +220,29 @@ $ curl -X POST localhost:10000/download -d '{"ref":"e7"}'
 
 - **Go** — single static binary, trivial cross-compile, goroutines for the concurrent CDP event loop and HTTP handlers.
 - **Chrome DevTools Protocol (CDP)** — drives headless Chromium directly; no Playwright / Puppeteer bloat.
+- **OpenAPI (generated from Go via swaggo) + Swagger UI** — annotations in the handlers generate the spec; it drives the interactive console at `/` and, later, the docs on the landing page.
 - **Local HTTP daemon** — one browser per port; address instances by port.
+
+---
+
+## Proposed `app/` Layout
+
+```text
+app/
+  go.mod                # module github.com/0xRuangsak/webrudder
+  main.go               # flag parsing → start daemon
+  internal/
+    cdp/                # thin CDP client (WebSocket + JSON)
+    browser/            # session + state machine
+    server/             # HTTP API + OpenAPI/Swagger UI handlers
+  ui/                   # embedded Swagger UI assets (go:embed)
+```
 
 ---
 
 ## Open Decisions
 
-Not yet decided — to confirm before building:
-
-- **Web UI live view** — full CDP screencast (video-like, heavier) vs a lightweight screenshot-refresh + clickable element list (leaner). Leaning lightweight first; not locked.
-- **Go module path & `app/` internal structure** — settle at scaffold time.
-- **`website/` landing page** — content and style not yet started.
+Core decisions resolved — see **Status**. New questions get tracked here as they surface.
 
 ---
 
@@ -241,7 +250,7 @@ Not yet decided — to confirm before building:
 
 Early — core design locked, implementation not started. The API above is the v1 target.
 
-**Locked:** Go + CDP engine in `app/`; static landing in `website/`; HTTP API + web UI on one port; default port `10000` (`--port` override, auto-increment, `--port 0`); click-driven uploads/downloads with chooser interception; text-first `scan`/`read`; browses-doesn't-judge (no assertions).
+**Locked:** Go + CDP engine in `app/` (`internal/{cdp,browser,server}` + embedded `ui/`); static Bootstrap landing in `web/`; HTTP API + **Swagger UI at `/`** on one port; default port `10000` (`--port` override, auto-increment, `--port 0`); click-driven uploads/downloads with chooser interception; text-first `scan`/`read`; browses-doesn't-judge (no assertions); OpenAPI generated from Go (swaggo); `web/` landing mirrors this README in Bootstrap. Headed / mirror / screencast modes dropped.
 
 ---
 
