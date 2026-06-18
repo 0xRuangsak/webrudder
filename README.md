@@ -277,6 +277,37 @@ Core decisions resolved — see **Status**. New questions get tracked here as th
 
 ---
 
+## Releases
+
+The binary is **not** committed — it's built and published to [GitHub Releases](https://github.com/0xRuangsak/webrudder/releases) per platform.
+
+Cut a release by pushing a tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` then cross-compiles (linux/darwin/windows × amd64/arm64), packages `.tar.gz`/`.zip` archives plus `checksums.txt`, and publishes a GitHub Release with auto-generated notes.
+
+Install from a release (example — macOS arm64):
+
+```bash
+curl -L -o webrudder.tar.gz \
+  https://github.com/0xRuangsak/webrudder/releases/download/v0.1.0/webrudder_v0.1.0_darwin_arm64.tar.gz
+tar xzf webrudder.tar.gz
+./webrudder https://example.com
+```
+
+Manual alternative (build locally, publish with the `gh` CLI):
+
+```bash
+cd app && go build -trimpath -ldflags "-s -w" -o webrudder .
+gh release create v0.1.0 webrudder --generate-notes
+```
+
+---
+
 ## License
 
 MIT

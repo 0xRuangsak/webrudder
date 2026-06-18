@@ -1,0 +1,65 @@
+name: release
+
+# Cut a release by pushing a tag:
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+      - name: Build and package
+        working-directory: app
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          bin=webrudder
+          [ "$GOOS" = "windows" ] && bin=webrudder.exe
+          go build -trimpath -ldflags "-s -w" -o "$bin" .
+          pkg="webrudder_${TAG}_${GOOS}_${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            zip "$pkg.zip" "$bin"
+          else
+            tar czf "$pkg.tar.gz" "$bin"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webrudder_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: app/webrudder_*.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > checksums.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

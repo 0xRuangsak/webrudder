@@ -1,0 +1,21 @@
+# Built binary — distributed via GitHub Releases, never committed
+/app/webrudder
+/app/webrudder.exe
+webrudder
+webrudder.exe
+
+# Local release artifacts
+/dist/
+*.tar.gz
+*.zip
+
+# Go test / profiling output
+*.test
+*.out
+*.prof
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
