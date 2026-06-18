@@ -15,11 +15,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - { goos: linux, goarch: amd64 }
-          - { goos: linux, goarch: arm64 }
-          - { goos: darwin, goarch: amd64 }
-          - { goos: darwin, goarch: arm64 }
-          - { goos: windows, goarch: amd64 }
+          - { goos: linux, goarch: amd64, label: linux_amd64 }
+          - { goos: linux, goarch: arm64, label: linux_arm64 }
+          - { goos: darwin, goarch: amd64, label: mac_intel }
+          - { goos: darwin, goarch: arm64, label: mac_apple_silicon }
+          - { goos: windows, goarch: amd64, label: windows_amd64 }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -32,13 +32,14 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           TAG: ${{ github.ref_name }}
+          LABEL: ${{ matrix.label }}
         run: |
-          out="webrudder_${TAG}_${GOOS}_${GOARCH}"
+          out="webrudder_${TAG}_${LABEL}"
           [ "$GOOS" = "windows" ] && out="${out}.exe"
           go build -trimpath -ldflags "-s -w" -o "$out" .
       - uses: actions/upload-artifact@v4
         with:
-          name: webrudder_${{ matrix.goos }}_${{ matrix.goarch }}
+          name: webrudder_${{ matrix.label }}
           path: app/webrudder_*
 
   release:

@@ -294,7 +294,7 @@ Install from a release (example — macOS arm64):
 
 ```bash
 curl -L -o webrudder \
-  https://github.com/0xRuangsak/webrudder/releases/download/v0.1.0/webrudder_v0.1.0_darwin_arm64
+  https://github.com/0xRuangsak/webrudder/releases/download/v0.1.0/webrudder_v0.1.0_mac_apple_silicon
 chmod +x webrudder
 ./webrudder https://example.com
 # macOS may quarantine an unsigned download:
