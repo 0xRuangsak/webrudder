@@ -4,4 +4,29 @@ The webrudder engine: a Go daemon that drives a headless Chromium over the Chrom
 
 See the [root README](../README.md) for the full design, API reference, and open decisions.
 
-**Status:** scaffolding pending.
+## Build & Run
+
+```bash
+go build -o webrudder .            # build the binary
+./webrudder https://example.com   # launch on :10000 (entry URL optional)
+```
+
+First launch auto-downloads a Chromium build (~150 MB, cached in `~/.cache/rod`). Then open <http://localhost:10000/> for Swagger UI, or drive the API directly:
+
+```bash
+curl localhost:10000/scan
+curl -X POST localhost:10000/click -d '{"ref":"e1"}'
+```
+
+## Regenerating the OpenAPI spec
+
+The `docs/` package is generated from handler annotations. After changing endpoints or DTOs:
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@latest   # once
+swag init -g main.go --parseInternal -o docs
+```
+
+A `Makefile` wraps these: `make build`, `make docs`.
+
+**Status:** v1 implemented — all endpoints live, smoke-tested against example.com.

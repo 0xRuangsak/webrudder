@@ -140,7 +140,7 @@ Base URL: `http://localhost:<port>`
 | `POST /batch` | `{actions:[…]}` | `{ok, results:[…]}` — many actions, one request |
 | `POST /shutdown` | — | stops the daemon and browser |
 
-Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status. The full schema lives in the OpenAPI spec that drives Swagger UI at `/`.
+Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status. The full schema lives in the OpenAPI spec that drives Swagger UI at `/`. (v1: `/click` returns `navigated`/`url`; `downloaded`/`needs_file` auto-detection is planned — see Status.)
 
 ### scan output
 
@@ -220,23 +220,27 @@ $ curl -X POST localhost:10000/download -d '{"ref":"e7"}'
 
 - **Go** — single static binary, trivial cross-compile, goroutines for the concurrent CDP event loop and HTTP handlers.
 - **Chrome DevTools Protocol (CDP)** — drives headless Chromium directly; no Playwright / Puppeteer bloat.
-- **OpenAPI (generated from Go via swaggo) + Swagger UI** — annotations in the handlers generate the spec; it drives the interactive console at `/` and, later, the docs on the landing page.
+- **OpenAPI (generated from Go via swaggo) + embedded Swagger UI** — handler annotations generate the spec (`swag init`); `http-swagger` serves the console at `/` from embedded assets (no CDN). The landing page can reuse the same spec later.
 - **Local HTTP daemon** — one browser per port; address instances by port.
 
 ---
 
-## Proposed `app/` Layout
+## `app/` Layout
 
 ```text
 app/
-  go.mod                # module github.com/0xRuangsak/webrudder
-  main.go               # flag parsing → start daemon
+  go.mod / go.sum
+  main.go                 # flags (url, --port, --downloads) → start daemon
   internal/
-    cdp/                # thin CDP client (WebSocket + JSON)
-    browser/            # session + state machine
-    server/             # HTTP API + OpenAPI/Swagger UI handlers
-  ui/                   # embedded Swagger UI assets (go:embed)
+    browser/session.go    # rod/CDP session: state machine, refs, scan/click/fill/upload/download
+    server/server.go      # HTTP API, routes, graceful shutdown, Swagger UI
+    server/dto.go         # request/response types (also the OpenAPI schema)
+  docs/                   # generated OpenAPI spec (swag init) — served at /swagger
+  Makefile                # build / docs / tidy
+  webrudder               # built binary
 ```
+
+rod is the CDP layer (no hand-rolled `cdp/` package needed); Swagger UI assets are embedded by `http-swagger` (no `ui/` folder, no CDN).
 
 ---
 
@@ -248,9 +252,13 @@ Core decisions resolved — see **Status**. New questions get tracked here as th
 
 ## Status
 
-Early — core design locked, implementation not started. The API above is the v1 target.
+**v1 implemented and smoke-tested.** The daemon launches headless Chromium (rod, auto-downloaded), serves the API + embedded Swagger UI, and tracks page state. Verified end-to-end against example.com: `status` / `scan` / `read` / `click` (navigation tracked) / `snap` / graceful shutdown, plus Swagger UI at `/`.
 
-**Locked:** Go + CDP engine in `app/` (`internal/{cdp,browser,server}` + embedded `ui/`); static Bootstrap landing in `web/`; HTTP API + **Swagger UI at `/`** on one port; default port `10000` (`--port` override, auto-increment, `--port 0`); click-driven uploads/downloads with chooser interception; text-first `scan`/`read`; browses-doesn't-judge (no assertions); OpenAPI generated from Go (swaggo); `web/` landing mirrors this README in Bootstrap. Headed / mirror / screencast modes dropped.
+**Implemented:** `/status /scan /read /snap /goto /click /fill /upload /download /batch /shutdown`; port default `10000` with auto-increment + `--port` / `--port 0`; `--downloads` dir; embedded Swagger UI.
+
+**v1 caveats:** `/click` reports `navigated`/`url`; auto-detecting `downloaded`/`needs_file` on a plain click is not wired yet — use `/download` and `/upload` explicitly. `/upload` resolves the page's file input directly (no chooser interception needed for the common case).
+
+**Locked (design):** Go + rod/CDP engine in `app/`; static Bootstrap landing in `web/`; HTTP API + Swagger UI on one port; text-first `scan`/`read`; browses-doesn't-judge (no assertions). Headed / mirror / screencast modes dropped.
 
 ---
 

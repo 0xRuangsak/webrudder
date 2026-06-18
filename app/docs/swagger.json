@@ -1,0 +1,589 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Browser automation daemon — navigate, interact, and extract from a live headless browser. One browser per port.",
+        "title": "webrudder API",
+        "contact": {},
+        "license": {
+            "name": "MIT"
+        },
+        "version": "1.0"
+    },
+    "basePath": "/",
+    "paths": {
+        "/batch": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Run multiple actions in one request",
+                "parameters": [
+                    {
+                        "description": "ordered actions",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.BatchReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.BatchResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/click": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Click an element by ref",
+                "parameters": [
+                    {
+                        "description": "element ref",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.ClickReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.ClickResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/download": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Click an element, wait for the download, return the saved path",
+                "parameters": [
+                    {
+                        "description": "ref and optional dir",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.DownloadReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.DownloadResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/fill": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Type text into an input/textarea by ref",
+                "parameters": [
+                    {
+                        "description": "ref and text",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.FillReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/goto": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Navigate to an absolute URL (explicit jump)",
+                "parameters": [
+                    {
+                        "description": "target url",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.GotoReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.GotoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/read": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "Extract page URL, title, and visible text",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.ReadResp"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/scan": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "List actionable elements (assigns refs e1, e2, …)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.ScanResp"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/shutdown": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "control"
+                ],
+                "summary": "Stop the daemon and browser",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/snap": {
+            "get": {
+                "produces": [
+                    "image/png"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "Screenshot the current viewport (PNG)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/status": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "Current URL, title, and port",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.StatusResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/upload": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Attach a local file to a file input by ref",
+                "parameters": [
+                    {
+                        "description": "ref and local file path",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.UploadReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "browser.Action": {
+            "type": "object",
+            "properties": {
+                "do": {
+                    "type": "string"
+                },
+                "file": {
+                    "type": "string"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "browser.Element": {
+            "type": "object",
+            "properties": {
+                "accept": {
+                    "description": "file input accept attribute",
+                    "type": "string"
+                },
+                "href": {
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "\"upload\" | \"download\" when statically known",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.BatchReq": {
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/browser.Action"
+                    }
+                }
+            }
+        },
+        "server.BatchResp": {
+            "type": "object",
+            "properties": {
+                "ok": {
+                    "type": "boolean"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                }
+            }
+        },
+        "server.ClickReq": {
+            "type": "object",
+            "properties": {
+                "ref": {
+                    "type": "string",
+                    "example": "e1"
+                }
+            }
+        },
+        "server.ClickResp": {
+            "type": "object",
+            "properties": {
+                "navigated": {
+                    "type": "boolean"
+                },
+                "ok": {
+                    "type": "boolean"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.DownloadReq": {
+            "type": "object",
+            "properties": {
+                "dir": {
+                    "type": "string"
+                },
+                "ref": {
+                    "type": "string",
+                    "example": "e7"
+                }
+            }
+        },
+        "server.DownloadResp": {
+            "type": "object",
+            "properties": {
+                "ok": {
+                    "type": "boolean"
+                },
+                "saved": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.ErrResp": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "ref \"e9\" not found — re-scan the page"
+                },
+                "ok": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "server.FillReq": {
+            "type": "object",
+            "properties": {
+                "ref": {
+                    "type": "string",
+                    "example": "e2"
+                },
+                "text": {
+                    "type": "string",
+                    "example": "user@example.com"
+                }
+            }
+        },
+        "server.GotoReq": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "example": "https://example.com"
+                }
+            }
+        },
+        "server.GotoResp": {
+            "type": "object",
+            "properties": {
+                "ok": {
+                    "type": "boolean"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.OKResp": {
+            "type": "object",
+            "properties": {
+                "ok": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "server.ReadResp": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.ScanResp": {
+            "type": "object",
+            "properties": {
+                "elements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/browser.Element"
+                    }
+                }
+            }
+        },
+        "server.StatusResp": {
+            "type": "object",
+            "properties": {
+                "port": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.UploadReq": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "example": "./avatar.png"
+                },
+                "ref": {
+                    "type": "string",
+                    "example": "e5"
+                }
+            }
+        }
+    }
+}

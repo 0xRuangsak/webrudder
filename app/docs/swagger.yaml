@@ -1,0 +1,382 @@
+basePath: /
+definitions:
+  browser.Action:
+    properties:
+      do:
+        type: string
+      file:
+        type: string
+      ref:
+        type: string
+      text:
+        type: string
+      url:
+        type: string
+    type: object
+  browser.Element:
+    properties:
+      accept:
+        description: file input accept attribute
+        type: string
+      href:
+        type: string
+      kind:
+        description: '"upload" | "download" when statically known'
+        type: string
+      name:
+        type: string
+      ref:
+        type: string
+      role:
+        type: string
+      type:
+        type: string
+    type: object
+  server.BatchReq:
+    properties:
+      actions:
+        items:
+          $ref: '#/definitions/browser.Action'
+        type: array
+    type: object
+  server.BatchResp:
+    properties:
+      ok:
+        type: boolean
+      results:
+        items:
+          additionalProperties: {}
+          type: object
+        type: array
+    type: object
+  server.ClickReq:
+    properties:
+      ref:
+        example: e1
+        type: string
+    type: object
+  server.ClickResp:
+    properties:
+      navigated:
+        type: boolean
+      ok:
+        type: boolean
+      url:
+        type: string
+    type: object
+  server.DownloadReq:
+    properties:
+      dir:
+        type: string
+      ref:
+        example: e7
+        type: string
+    type: object
+  server.DownloadResp:
+    properties:
+      ok:
+        type: boolean
+      saved:
+        type: string
+    type: object
+  server.ErrResp:
+    properties:
+      error:
+        example: ref "e9" not found — re-scan the page
+        type: string
+      ok:
+        type: boolean
+    type: object
+  server.FillReq:
+    properties:
+      ref:
+        example: e2
+        type: string
+      text:
+        example: user@example.com
+        type: string
+    type: object
+  server.GotoReq:
+    properties:
+      url:
+        example: https://example.com
+        type: string
+    type: object
+  server.GotoResp:
+    properties:
+      ok:
+        type: boolean
+      url:
+        type: string
+    type: object
+  server.OKResp:
+    properties:
+      ok:
+        type: boolean
+    type: object
+  server.ReadResp:
+    properties:
+      text:
+        type: string
+      title:
+        type: string
+      url:
+        type: string
+    type: object
+  server.ScanResp:
+    properties:
+      elements:
+        items:
+          $ref: '#/definitions/browser.Element'
+        type: array
+    type: object
+  server.StatusResp:
+    properties:
+      port:
+        type: integer
+      title:
+        type: string
+      url:
+        type: string
+    type: object
+  server.UploadReq:
+    properties:
+      file:
+        example: ./avatar.png
+        type: string
+      ref:
+        example: e5
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Browser automation daemon — navigate, interact, and extract from a
+    live headless browser. One browser per port.
+  license:
+    name: MIT
+  title: webrudder API
+  version: "1.0"
+paths:
+  /batch:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ordered actions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.BatchReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.BatchResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Run multiple actions in one request
+      tags:
+      - interact
+  /click:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: element ref
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.ClickReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.ClickResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Click an element by ref
+      tags:
+      - interact
+  /download:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ref and optional dir
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.DownloadReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.DownloadResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Click an element, wait for the download, return the saved path
+      tags:
+      - interact
+  /fill:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ref and text
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.FillReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Type text into an input/textarea by ref
+      tags:
+      - interact
+  /goto:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: target url
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.GotoReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.GotoResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Navigate to an absolute URL (explicit jump)
+      tags:
+      - interact
+  /read:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.ReadResp'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Extract page URL, title, and visible text
+      tags:
+      - read
+  /scan:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.ScanResp'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: List actionable elements (assigns refs e1, e2, …)
+      tags:
+      - read
+  /shutdown:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+      summary: Stop the daemon and browser
+      tags:
+      - control
+  /snap:
+    get:
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Screenshot the current viewport (PNG)
+      tags:
+      - read
+  /status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.StatusResp'
+      summary: Current URL, title, and port
+      tags:
+      - read
+  /upload:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ref and local file path
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.UploadReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Attach a local file to a file input by ref
+      tags:
+      - interact
+swagger: "2.0"
