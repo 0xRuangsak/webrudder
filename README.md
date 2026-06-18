@@ -1,14 +1,38 @@
 # webrudder
 
-> Fast, lightweight browser automation for LLM agents. Launch a headless browser bound to a local HTTP port, then drive it with plain requests — navigate, interact, extract. Text-first, no screenshot-per-step.
+> Fast, lightweight browser automation for LLM agents. Launch a headless browser bound to a local port, then drive it two ways — a live web UI or a plain HTTP API.
 
 ---
 
 ## What It Is
 
-`webrudder <url>` starts a local daemon: it launches a headless Chromium at that URL and serves a small HTTP API on a localhost port. You — or an LLM agent, or a script — drive the live browser by sending requests to that port. Navigation happens by *interacting* (clicking links and buttons); the daemon is a state machine that tracks the current URL, DOM, and element map. Close the terminal and the browser dies with it.
+`webrudder <url>` starts a local daemon (the `app/` engine): it launches a headless Chromium at that URL and serves it on a localhost port. The same live browser is reachable two ways — a **web UI** you open in your own browser, and an **HTTP API** for agents and scripts. Navigation happens by *interacting* (clicking links and buttons); the daemon is a state machine that tracks the current URL, DOM, and element map. Close the terminal and the browser dies with it.
 
-No bundled browser bloat. No per-step screenshots. No MCP layer. One static binary talking to Chromium over CDP, exposing plain HTTP.
+No bundled browser bloat. No per-step screenshots. No MCP layer. One static binary talking to Chromium over CDP.
+
+---
+
+## Repository Layout
+
+```text
+webrudder/
+├── app/        # engine — Go daemon + headless Chromium (CDP) → HTTP API + web UI
+├── website/    # landing page (static marketing site) — not part of the daemon
+└── README.md   # plan / overview (this file)
+```
+
+---
+
+## Interfaces
+
+The daemon serves one live browser through two surfaces on the same port:
+
+| Surface | URL | For | What it does |
+| --- | --- | --- | --- |
+| **Web UI** | `http://localhost:10000/` | humans | live control panel — view the current page and click it visually |
+| **HTTP API** | `http://localhost:10000/scan`, `/click`, … | agents / scripts | programmatic control, JSON in and out |
+
+Both act on the **same state machine**: a click in the UI shows up in the next `/scan`, and an API `/click` updates what the UI displays. One browser, two control surfaces.
 
 ---
 
@@ -27,9 +51,10 @@ Driving a browser through an LLM is slow when every step round-trips a screensho
 Terminal:  ./webrudder https://example.com
                  ↓
    Daemon launches headless Chromium (over CDP)
-   and serves HTTP on http://localhost:9797
+   and serves http://localhost:10000
                  ↓
-   You send requests:  GET /scan · POST /click · GET /read ...
+   Humans → open localhost:10000 in a browser (live UI)
+   Agents → GET /scan · POST /click · GET /read ...
                  ↓
    Daemon = state machine: current URL + DOM + element map.
    Clicking navigates; re-scan for the new page's elements.
@@ -47,21 +72,23 @@ Start it (one terminal):
 
 ```console
 $ ./webrudder https://example.com
-webrudder · http://localhost:9797 · chromium pid 4821 · ctrl-c to quit
+webrudder · http://localhost:10000 · chromium pid 4821 · ctrl-c to quit
 ```
 
-Drive it (from anywhere — curl, an agent, a script):
+Drive it via API (curl, an agent, a script):
 
 ```console
-$ curl localhost:9797/scan
+$ curl localhost:10000/scan
 {"elements":[{"ref":"e1","role":"link","name":"More information","href":"..."}]}
 
-$ curl localhost:9797/read
+$ curl localhost:10000/read
 {"url":"https://example.com/","title":"Example Domain","text":"Example Domain. This domain is..."}
 
-$ curl -X POST localhost:9797/click -d '{"ref":"e1"}'
+$ curl -X POST localhost:10000/click -d '{"ref":"e1"}'
 {"ok":true,"navigated":true,"url":"https://www.iana.org/help/example-domains"}
 ```
+
+Or open `http://localhost:10000/` in your browser for the live UI.
 
 Element refs (`e1`, `e2`, …) are stable for the **current** page. After navigating, call `/scan` again to get the new page's refs.
 
@@ -75,7 +102,7 @@ Element refs (`e1`, `e2`, …) are stable for the **current** page. After naviga
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--port N` | `9797` | HTTP port. Auto-increments if busy. `--port 0` = OS-assigned free port. |
+| `--port N` | `10000` | HTTP port. Auto-increments if busy. `--port 0` = OS-assigned free port. |
 | `--downloads DIR` | session temp dir | where downloaded files are saved |
 | `--headed` | off | launch a visible Chromium window (for debugging) |
 
@@ -88,11 +115,11 @@ Element refs (`e1`, `e2`, …) are stable for the **current** page. After naviga
 Each `webrudder` is one browser on one port. Run as many as you like, side by side:
 
 ```bash
-./webrudder https://example.com   --port 9797
-./webrudder https://example2.com  --port 9798
+./webrudder https://example.com   --port 10000
+./webrudder https://example2.com  --port 10001
 ```
 
-- Default `9797`, auto-incrementing to the next free port if busy. The chosen port is printed on start.
+- Default `10000`, auto-incrementing to the next free port if busy. The chosen port is printed on start.
 - `--port N` forces a specific port; `--port 0` lets the OS pick any free one.
 - **The port is the instance selector** — every request targets exactly one daemon by its port.
 
@@ -139,7 +166,7 @@ Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status.
 Fill a login form and submit in one request:
 
 ```console
-$ curl -X POST localhost:9797/batch -d '{
+$ curl -X POST localhost:10000/batch -d '{
   "actions":[
     {"do":"fill","ref":"e2","text":"user@example.com"},
     {"do":"fill","ref":"e3","text":"hunter2"},
@@ -170,14 +197,14 @@ So you never need to know a button's purpose in advance: use the hint when prese
 **Upload** — `ref` is the button you click to start the upload (from `scan`), not a hidden input:
 
 ```console
-$ curl -X POST localhost:9797/upload -d '{"ref":"e5","file":"./avatar.png"}'
+$ curl -X POST localhost:10000/upload -d '{"ref":"e5","file":"./avatar.png"}'
 {"ok":true}
 ```
 
 **Download** — clicks, waits for the file to finish, returns the saved path:
 
 ```console
-$ curl -X POST localhost:9797/download -d '{"ref":"e7"}'
+$ curl -X POST localhost:10000/download -d '{"ref":"e7"}'
 {"ok":true,"saved":"/abs/downloads/report.pdf"}
 ```
 
@@ -200,9 +227,21 @@ $ curl -X POST localhost:9797/download -d '{"ref":"e7"}'
 
 ---
 
+## Open Decisions
+
+Not yet decided — to confirm before building:
+
+- **Web UI live view** — full CDP screencast (video-like, heavier) vs a lightweight screenshot-refresh + clickable element list (leaner). Leaning lightweight first; not locked.
+- **Go module path & `app/` internal structure** — settle at scaffold time.
+- **`website/` landing page** — content and style not yet started.
+
+---
+
 ## Status
 
-Early — design locked, implementation starting. The API above is the v1 target.
+Early — core design locked, implementation not started. The API above is the v1 target.
+
+**Locked:** Go + CDP engine in `app/`; static landing in `website/`; HTTP API + web UI on one port; default port `10000` (`--port` override, auto-increment, `--port 0`); click-driven uploads/downloads with chooser interception; text-first `scan`/`read`; browses-doesn't-judge (no assertions).
 
 ---
 
