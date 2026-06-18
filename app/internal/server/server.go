@@ -40,7 +40,13 @@ func Run(sess *browser.Session, port int) error {
 
 	mux := http.NewServeMux()
 	s.routes(mux)
-	httpSrv := &http.Server{Handler: mux}
+	// ReadHeaderTimeout guards against slow-header clients; WriteTimeout is left
+	// off because /snap and /download can legitimately run for tens of seconds.
+	httpSrv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 
 	fmt.Printf("webrudder · http://localhost:%d · ctrl-c to quit\n", chosen)
 
@@ -87,7 +93,9 @@ func listen(port int) (net.Listener, int, error) {
 func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/status", s.route(http.MethodGet, s.handleStatus))
 	mux.HandleFunc("/scan", s.route(http.MethodGet, s.handleScan))
+	mux.HandleFunc("/snapshot", s.route(http.MethodGet, s.handleSnapshot))
 	mux.HandleFunc("/read", s.route(http.MethodGet, s.handleRead))
+	mux.HandleFunc("/html", s.route(http.MethodGet, s.handleHTML))
 	mux.HandleFunc("/snap", s.route(http.MethodGet, s.handleSnap))
 	mux.HandleFunc("/goto", s.route(http.MethodPost, s.handleGoto))
 	mux.HandleFunc("/click", s.route(http.MethodPost, s.handleClick))
@@ -187,6 +195,41 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ScanResp{Elements: els})
+}
+
+// handleSnapshot returns the accessibility tree as text.
+// @Summary  Accessibility-tree outline (role + name + ARIA state, as text)
+// @Tags     read
+// @Produce  plain
+// @Success  200 {string} string
+// @Failure  500 {object} ErrResp
+// @Router   /snapshot [get]
+func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
+	tree, err := s.sess.Snapshot()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(tree))
+}
+
+// handleHTML returns raw HTML (page, or ?ref=eN element).
+// @Summary  Raw outer HTML (full page, or a single element via ?ref)
+// @Tags     read
+// @Produce  html
+// @Param    ref query string false "element ref for outerHTML; omit for the full page"
+// @Success  200 {string} string
+// @Failure  400 {object} ErrResp
+// @Router   /html [get]
+func (s *Server) handleHTML(w http.ResponseWriter, r *http.Request) {
+	html, err := s.sess.HTML(r.URL.Query().Get("ref"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(html))
 }
 
 // handleRead returns the page text.

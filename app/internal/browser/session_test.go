@@ -113,6 +113,24 @@ func TestSessionFunctional(t *testing.T) {
 		t.Error("scan did not tag the download link kind=download")
 	}
 
+	// a11y snapshot surfaces non-interactive names as text (what scan misses)
+	snap, err := s.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if !strings.Contains(snap, "Go Next") {
+		t.Errorf("snapshot missing link name; got:\n%s", snap)
+	}
+
+	// raw HTML escape hatch
+	html, err := s.HTML("")
+	if err != nil {
+		t.Fatalf("HTML: %v", err)
+	}
+	if !strings.Contains(html, `type="file"`) {
+		t.Error("HTML missing the file input markup")
+	}
+
 	// fill
 	nameRef := refByName(els, "yourname")
 	if nameRef == "" {

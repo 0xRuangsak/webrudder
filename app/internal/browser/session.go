@@ -10,6 +10,11 @@
 // A background watcher turns two CDP signals into channels so a plain click can
 // report what it caused: file-chooser interception (→ needs_file) and download
 // progress (→ downloaded path).
+//
+// Robustness: every page operation is wrapped in a per-op timeout, so a slow or
+// hostile page (heavy SPA, consent wall) can never block the session mutex
+// forever. /status reads a lock-free cached snapshot, so it stays responsive
+// even while a long navigation holds the page lock.
 package browser
 
 import (
@@ -27,6 +32,16 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+// Per-operation timeouts — the ceiling on how long any single action may hold
+// the session lock.
+const (
+	navTimeout   = 30 * time.Second
+	actTimeout   = 20 * time.Second
+	infoTimeout  = 5 * time.Second
+	snapTimeout  = 45 * time.Second
+	downloadWait = 30 * time.Second
+)
+
 // Session is one browser + one page, guarded by a mutex so concurrent HTTP
 // handlers serialize their access to the (non-thread-safe) page.
 type Session struct {
@@ -35,6 +50,12 @@ type Session struct {
 	launcher  *launcher.Launcher
 	page      *rod.Page
 	downloads string
+
+	// Lock-free cached page state for /status (updated after each op), so a
+	// status check never waits on a long-running navigation.
+	stMu      sync.RWMutex
+	lastURL   string
+	lastTitle string
 
 	chooser chan struct{} // a click opened a file chooser
 	dlBegin chan struct{} // a download started
@@ -118,6 +139,7 @@ func New(entryURL, downloadsDir string) (*Session, error) {
 			return nil, err
 		}
 	}
+	s.cacheState()
 	return s, nil
 }
 
@@ -217,19 +239,31 @@ func (s *Session) settle() {
 	_ = rod.Try(func() { s.page.Timeout(3 * time.Second).MustWaitStable() })
 }
 
-// Status returns the current URL and title.
-func (s *Session) Status() (pageURL, title string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.info()
-}
-
+// info reads the live URL/title, bounded so it can never hang.
 func (s *Session) info() (pageURL, title string) {
-	info, err := s.page.Info()
+	got, err := s.page.Timeout(infoTimeout).Info()
 	if err != nil {
 		return "", ""
 	}
-	return info.URL, info.Title
+	return got.URL, got.Title
+}
+
+// cacheState snapshots the live URL/title into the lock-free cache for /status.
+func (s *Session) cacheState() {
+	u, t := s.info()
+	if u != "" {
+		s.stMu.Lock()
+		s.lastURL, s.lastTitle = u, t
+		s.stMu.Unlock()
+	}
+}
+
+// Status returns the cached URL and title without taking the page lock, so it
+// stays responsive even while a long navigation is in flight.
+func (s *Session) Status() (pageURL, title string) {
+	s.stMu.RLock()
+	defer s.stMu.RUnlock()
+	return s.lastURL, s.lastTitle
 }
 
 // validNavURL allows only http/https (and about:blank). Other schemes — file,
@@ -259,10 +293,12 @@ func (s *Session) Goto(rawURL string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.page.Navigate(rawURL); err != nil {
+	if err := s.page.Timeout(navTimeout).Navigate(rawURL); err != nil {
+		s.cacheState()
 		return fmt.Errorf("navigate: %w", err)
 	}
 	s.settle()
+	s.cacheState()
 	return nil
 }
 
@@ -316,12 +352,12 @@ const scanJS = `() => {
 func (s *Session) Scan() ([]Element, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	res, err := s.page.Eval(scanJS)
+	obj, err := s.page.Timeout(actTimeout).Eval(scanJS)
 	if err != nil {
 		return nil, fmt.Errorf("scan: %w", err)
 	}
 	var els []Element
-	if err := json.Unmarshal([]byte(res.Value.Str()), &els); err != nil {
+	if err := json.Unmarshal([]byte(obj.Value.Str()), &els); err != nil {
 		return nil, fmt.Errorf("parse scan: %w", err)
 	}
 	return els, nil
@@ -332,11 +368,11 @@ func (s *Session) Read() (pageURL, title, text string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	pageURL, title = s.info()
-	res, err := s.page.Eval(`() => document.body ? document.body.innerText : ""`)
+	obj, err := s.page.Timeout(actTimeout).Eval(`() => document.body ? document.body.innerText : ""`)
 	if err != nil {
 		return pageURL, title, "", fmt.Errorf("read: %w", err)
 	}
-	return pageURL, title, res.Value.Str(), nil
+	return pageURL, title, obj.Value.Str(), nil
 }
 
 // Snap returns a PNG screenshot. fullPage captures the entire scrollable page;
@@ -344,16 +380,113 @@ func (s *Session) Read() (pageURL, title, text string, err error) {
 func (s *Session) Snap(fullPage bool) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	png, err := s.page.Screenshot(fullPage, nil)
+	png, err := s.page.Timeout(snapTimeout).Screenshot(fullPage, nil)
 	if err != nil {
 		return nil, fmt.Errorf("snap: %w", err)
 	}
 	return png, nil
 }
 
+// Snapshot returns the page's accessibility tree as an indented text outline
+// (role + accessible name). Unlike scan (interactive elements only) this
+// includes non-interactive nodes and their ARIA state — e.g. a Wordle tile
+// reads `image "1st letter, C, absent"` — so state-bearing pages can be read as
+// text instead of a screenshot.
+func (s *Session) Snapshot() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res, err := proto.AccessibilityGetFullAXTree{}.Call(s.page.Timeout(actTimeout))
+	if err != nil {
+		return "", fmt.Errorf("snapshot: %w", err)
+	}
+	byID := make(map[proto.AccessibilityAXNodeID]*proto.AccessibilityAXNode, len(res.Nodes))
+	for _, n := range res.Nodes {
+		byID[n.NodeID] = n
+	}
+	var b strings.Builder
+	var walk func(id proto.AccessibilityAXNodeID, depth int)
+	walk = func(id proto.AccessibilityAXNodeID, depth int) {
+		n := byID[id]
+		if n == nil {
+			return
+		}
+		next := depth
+		if line, ok := axLine(n); ok {
+			b.WriteString(strings.Repeat("  ", depth))
+			b.WriteString(line)
+			b.WriteByte('\n')
+			next = depth + 1
+		}
+		for _, c := range n.ChildIDs {
+			walk(c, next)
+		}
+	}
+	for _, n := range res.Nodes {
+		if n.ParentID == "" || byID[n.ParentID] == nil {
+			walk(n.NodeID, 0)
+		}
+	}
+	if b.Len() == 0 {
+		return "(empty)\n", nil
+	}
+	return b.String(), nil
+}
+
+// axLine formats one AX node and reports whether it's worth showing (drops
+// ignored nodes and unnamed structural noise).
+func axLine(n *proto.AccessibilityAXNode) (string, bool) {
+	if n.Ignored {
+		return "", false
+	}
+	role := axStr(n.Role)
+	if role == "" {
+		return "", false
+	}
+	name := axStr(n.Name)
+	if name == "" {
+		switch role {
+		case "generic", "none", "InlineTextBox", "LineBreak", "paragraph", "list", "listitem", "group":
+			return "", false
+		}
+		return role, true
+	}
+	return fmt.Sprintf("%s %q", role, name), true
+}
+
+func axStr(v *proto.AccessibilityAXValue) string {
+	if v == nil {
+		return ""
+	}
+	return strings.TrimSpace(v.Value.Str())
+}
+
+// HTML returns the page's outer HTML, or a single element's outer HTML when ref
+// is given. The escape hatch for state the accessibility tree doesn't expose
+// (e.g. CSS-only styling, custom data-* attributes).
+func (s *Session) HTML(ref string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ref != "" {
+		el, err := s.elem(ref)
+		if err != nil {
+			return "", err
+		}
+		h, err := el.Timeout(actTimeout).HTML()
+		if err != nil {
+			return "", fmt.Errorf("html: %w", err)
+		}
+		return h, nil
+	}
+	h, err := s.page.Timeout(actTimeout).HTML()
+	if err != nil {
+		return "", fmt.Errorf("html: %w", err)
+	}
+	return h, nil
+}
+
 // elem resolves a ref (e1, e2, …) to the live element via its data-wr-ref tag.
 func (s *Session) elem(ref string) (*rod.Element, error) {
-	el, err := s.page.Element(fmt.Sprintf(`[data-wr-ref=%q]`, ref))
+	el, err := s.page.Timeout(actTimeout).Element(fmt.Sprintf(`[data-wr-ref=%q]`, ref))
 	if err != nil {
 		return nil, fmt.Errorf("ref %q not found — re-scan the page", ref)
 	}
@@ -376,13 +509,14 @@ func (s *Session) Click(ref string) (ClickResult, error) {
 	drainStr(s.dlDone)
 
 	before, _ := s.info()
-	if err := el.Click(proto.InputMouseButtonLeft, 1); err != nil {
+	if err := el.Timeout(actTimeout).Click(proto.InputMouseButtonLeft, 1); err != nil {
 		return res, fmt.Errorf("click: %w", err)
 	}
 	s.settle()
 	after, _ := s.info()
 	res.Navigated = after != before
 	res.URL = after
+	s.cacheState()
 
 	select {
 	case <-s.chooser:
@@ -396,7 +530,7 @@ func (s *Session) Click(ref string) (ClickResult, error) {
 		select {
 		case p := <-s.dlDone:
 			res.Downloaded = p
-		case <-time.After(30 * time.Second):
+		case <-time.After(downloadWait):
 		}
 	default:
 	}
@@ -412,8 +546,8 @@ func (s *Session) Fill(ref, text string) error {
 	if err != nil {
 		return err
 	}
-	_ = el.SelectAllText() // best-effort clear before typing
-	if err := el.Input(text); err != nil {
+	_ = el.Timeout(actTimeout).SelectAllText() // best-effort clear before typing
+	if err := el.Timeout(actTimeout).Input(text); err != nil {
 		return fmt.Errorf("fill: %w", err)
 	}
 	return nil
@@ -436,20 +570,20 @@ func (s *Session) Upload(ref, file string) error {
 		return err
 	}
 	if !isFileInput(el) {
-		alt, e := s.page.Element(`input[type=file]`)
+		alt, e := s.page.Timeout(actTimeout).Element(`input[type=file]`)
 		if e != nil {
 			return fmt.Errorf("no file input found for ref %q", ref)
 		}
 		el = alt
 	}
-	if err := el.SetFiles([]string{abs}); err != nil {
+	if err := el.Timeout(actTimeout).SetFiles([]string{abs}); err != nil {
 		return fmt.Errorf("upload: %w", err)
 	}
 	return nil
 }
 
 func isFileInput(el *rod.Element) bool {
-	t, err := el.Attribute("type")
+	t, err := el.Timeout(infoTimeout).Attribute("type")
 	return err == nil && t != nil && strings.EqualFold(*t, "file")
 }
 
@@ -470,10 +604,11 @@ func (s *Session) Download(ref, dir string) (string, error) {
 	}
 
 	drainStr(s.dlDone)
-	if err := el.Click(proto.InputMouseButtonLeft, 1); err != nil {
+	if err := el.Timeout(actTimeout).Click(proto.InputMouseButtonLeft, 1); err != nil {
 		return "", fmt.Errorf("download click: %w", err)
 	}
 
+	defer s.cacheState()
 	select {
 	case saved := <-s.dlDone:
 		if dir != s.downloads {
@@ -483,7 +618,7 @@ func (s *Session) Download(ref, dir string) (string, error) {
 			}
 		}
 		return saved, nil
-	case <-time.After(30 * time.Second):
+	case <-time.After(downloadWait):
 		return "", fmt.Errorf("download timed out — did the click trigger a download?")
 	}
 }

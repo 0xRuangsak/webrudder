@@ -286,6 +286,27 @@ paths:
       summary: Navigate to an absolute URL (explicit jump)
       tags:
       - interact
+  /html:
+    get:
+      parameters:
+      - description: element ref for outerHTML; omit for the full page
+        in: query
+        name: ref
+        type: string
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Raw outer HTML (full page, or a single element via ?ref)
+      tags:
+      - read
   /read:
     get:
       produces:
@@ -349,6 +370,22 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrResp'
       summary: Screenshot the page (PNG, full page by default)
+      tags:
+      - read
+  /snapshot:
+    get:
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Accessibility-tree outline (role + name + ARIA state, as text)
       tags:
       - read
   /status:

@@ -213,6 +213,39 @@ const docTemplate = `{
                 }
             }
         },
+        "/html": {
+            "get": {
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "Raw outer HTML (full page, or a single element via ?ref)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "element ref for outerHTML; omit for the full page",
+                        "name": "ref",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/read": {
             "get": {
                 "produces": [
@@ -304,6 +337,31 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "file"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/snapshot": {
+            "get": {
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "Accessibility-tree outline (role + name + ARIA state, as text)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "500": {
