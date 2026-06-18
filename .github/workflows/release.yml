@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: app/go.mod
-      - name: Build and package
+      - name: Build
         working-directory: app
         env:
           CGO_ENABLED: "0"
@@ -33,19 +33,13 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           TAG: ${{ github.ref_name }}
         run: |
-          bin=webrudder
-          [ "$GOOS" = "windows" ] && bin=webrudder.exe
-          go build -trimpath -ldflags "-s -w" -o "$bin" .
-          pkg="webrudder_${TAG}_${GOOS}_${GOARCH}"
-          if [ "$GOOS" = "windows" ]; then
-            zip "$pkg.zip" "$bin"
-          else
-            tar czf "$pkg.tar.gz" "$bin"
-          fi
+          out="webrudder_${TAG}_${GOOS}_${GOARCH}"
+          [ "$GOOS" = "windows" ] && out="${out}.exe"
+          go build -trimpath -ldflags "-s -w" -o "$out" .
       - uses: actions/upload-artifact@v4
         with:
           name: webrudder_${{ matrix.goos }}_${{ matrix.goarch }}
-          path: app/webrudder_*.*
+          path: app/webrudder_*
 
   release:
     needs: build

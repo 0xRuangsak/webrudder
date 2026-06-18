@@ -288,15 +288,17 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` then cross-compiles (linux/darwin/windows × amd64/arm64), packages `.tar.gz`/`.zip` archives plus `checksums.txt`, and publishes a GitHub Release with auto-generated notes.
+`.github/workflows/release.yml` then cross-compiles (linux/darwin/windows × amd64/arm64) and publishes a GitHub Release with the **raw per-platform binaries** plus `checksums.txt` and auto-generated notes.
 
 Install from a release (example — macOS arm64):
 
 ```bash
-curl -L -o webrudder.tar.gz \
-  https://github.com/0xRuangsak/webrudder/releases/download/v0.1.0/webrudder_v0.1.0_darwin_arm64.tar.gz
-tar xzf webrudder.tar.gz
+curl -L -o webrudder \
+  https://github.com/0xRuangsak/webrudder/releases/download/v0.1.0/webrudder_v0.1.0_darwin_arm64
+chmod +x webrudder
 ./webrudder https://example.com
+# macOS may quarantine an unsigned download:
+#   xattr -d com.apple.quarantine webrudder
 ```
 
 Manual alternative (build locally, publish with the `gh` CLI):
