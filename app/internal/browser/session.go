@@ -339,11 +339,12 @@ func (s *Session) Read() (pageURL, title, text string, err error) {
 	return pageURL, title, res.Value.Str(), nil
 }
 
-// Snap returns a PNG screenshot of the current viewport.
-func (s *Session) Snap() ([]byte, error) {
+// Snap returns a PNG screenshot. fullPage captures the entire scrollable page;
+// otherwise just the current viewport.
+func (s *Session) Snap(fullPage bool) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	png, err := s.page.Screenshot(false, nil)
+	png, err := s.page.Screenshot(fullPage, nil)
 	if err != nil {
 		return nil, fmt.Errorf("snap: %w", err)
 	}

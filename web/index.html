@@ -198,7 +198,7 @@ $ curl -X POST localhost:10000/click -d '{"ref":"e1"}'
           <tbody>
             <tr><td><code>GET /scan</code></td><td>—</td><td>actionable elements <code>[{ref, role, name, kind?}]</code></td></tr>
             <tr><td><code>GET /read</code></td><td>—</td><td><code>{url, title, text}</code></td></tr>
-            <tr><td><code>GET /snap</code></td><td>—</td><td>PNG bytes; <code>POST /snap {path}</code> saves and returns <code>{path}</code></td></tr>
+            <tr><td><code>GET /snap</code></td><td>—</td><td>full-page PNG; <code>?full=false</code> for viewport only</td></tr>
             <tr><td><code>GET /status</code></td><td>—</td><td><code>{url, title, port}</code></td></tr>
             <tr><td><code>POST /click</code></td><td><code>{ref}</code></td><td><code>{ok, navigated?, downloaded?, needs_file?}</code></td></tr>
             <tr><td><code>POST /fill</code></td><td><code>{ref, text}</code></td><td><code>{ok}</code></td></tr>

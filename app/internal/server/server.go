@@ -206,14 +206,19 @@ func (s *Server) handleRead(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSnap returns a screenshot.
-// @Summary  Screenshot the current viewport (PNG)
+// @Summary  Screenshot the page (PNG, full page by default)
 // @Tags     read
 // @Produce  png
+// @Param    full query boolean false "full scrollable page (default true); false = viewport only"
 // @Success  200 {file} binary
 // @Failure  500 {object} ErrResp
 // @Router   /snap [get]
 func (s *Server) handleSnap(w http.ResponseWriter, r *http.Request) {
-	png, err := s.sess.Snap()
+	full := true
+	if v := r.URL.Query().Get("full"); v == "false" || v == "0" {
+		full = false
+	}
+	png, err := s.sess.Snap(full)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err)
 		return

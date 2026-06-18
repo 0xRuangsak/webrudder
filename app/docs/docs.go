@@ -290,7 +290,15 @@ const docTemplate = `{
                 "tags": [
                     "read"
                 ],
-                "summary": "Screenshot the current viewport (PNG)",
+                "summary": "Screenshot the page (PNG, full page by default)",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "full scrollable page (default true); false = viewport only",
+                        "name": "full",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",

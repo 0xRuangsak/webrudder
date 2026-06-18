@@ -130,7 +130,7 @@ Base URL: `http://localhost:<port>`
 | --- | --- | --- |
 | `GET /scan` | — | actionable elements: `[{ref, role, name, kind?, accept?, href?}]` |
 | `GET /read` | — | `{url, title, text}` |
-| `GET /snap` | — | PNG bytes (`curl -o shot.png`); `POST /snap {path}` saves and returns `{path}` |
+| `GET /snap` | — | full-page PNG (`curl -o shot.png`); `?full=false` = viewport only |
 | `GET /status` | — | `{url, title, port}` |
 | `POST /click` | `{ref}` | `{ok, navigated?, url?, downloaded?, needs_file?}` |
 | `POST /fill` | `{ref, text}` | `{ok}` |

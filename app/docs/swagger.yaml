@@ -332,6 +332,11 @@ paths:
       - control
   /snap:
     get:
+      parameters:
+      - description: full scrollable page (default true); false = viewport only
+        in: query
+        name: full
+        type: boolean
       produces:
       - image/png
       responses:
@@ -343,7 +348,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/server.ErrResp'
-      summary: Screenshot the current viewport (PNG)
+      summary: Screenshot the page (PNG, full page by default)
       tags:
       - read
   /status:
