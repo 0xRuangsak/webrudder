@@ -49,6 +49,15 @@ definitions:
           type: object
         type: array
     type: object
+  server.CheckReq:
+    properties:
+      checked:
+        example: true
+        type: boolean
+      ref:
+        example: e4
+        type: string
+    type: object
   server.ClickReq:
     properties:
       ref:
@@ -113,10 +122,22 @@ definitions:
       url:
         type: string
     type: object
+  server.HoverReq:
+    properties:
+      ref:
+        example: e1
+        type: string
+    type: object
   server.OKResp:
     properties:
       ok:
         type: boolean
+    type: object
+  server.PressReq:
+    properties:
+      key:
+        example: Enter
+        type: string
     type: object
   server.ReadResp:
     properties:
@@ -134,6 +155,26 @@ definitions:
           $ref: '#/definitions/browser.Element'
         type: array
     type: object
+  server.ScrollReq:
+    properties:
+      amount:
+        type: number
+      dir:
+        example: down
+        type: string
+      ref:
+        type: string
+    type: object
+  server.SelectReq:
+    properties:
+      ref:
+        example: e3
+        type: string
+      values:
+        items:
+          type: string
+        type: array
+    type: object
   server.StatusResp:
     properties:
       port:
@@ -141,6 +182,12 @@ definitions:
       title:
         type: string
       url:
+        type: string
+    type: object
+  server.TypeReq:
+    properties:
+      text:
+        example: hello
         type: string
     type: object
   server.UploadReq:
@@ -152,6 +199,17 @@ definitions:
         example: e5
         type: string
     type: object
+  server.WaitReq:
+    properties:
+      gone:
+        type: boolean
+      ms:
+        type: integer
+      selector:
+        type: string
+      text:
+        type: string
+    type: object
 info:
   contact: {}
   description: Browser automation daemon — navigate, interact, and extract from a
@@ -161,6 +219,22 @@ info:
   title: webrudder API
   version: "1.0"
 paths:
+  /back:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.GotoResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Navigate back
+      tags:
+      - interact
   /batch:
     post:
       consumes:
@@ -184,6 +258,31 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrResp'
       summary: Run multiple actions in one request
+      tags:
+      - interact
+  /check:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ref and desired checked state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.CheckReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Set a checkbox/radio to checked/unchecked
       tags:
       - interact
   /click:
@@ -261,6 +360,22 @@ paths:
       summary: Type text into an input/textarea by ref
       tags:
       - interact
+  /forward:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.GotoResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Navigate forward
+      tags:
+      - interact
   /goto:
     post:
       consumes:
@@ -286,6 +401,31 @@ paths:
       summary: Navigate to an absolute URL (explicit jump)
       tags:
       - interact
+  /hover:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ref
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.HoverReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Hover an element by ref
+      tags:
+      - interact
   /html:
     get:
       parameters:
@@ -307,6 +447,31 @@ paths:
       summary: Raw outer HTML (full page, or a single element via ?ref)
       tags:
       - read
+  /press:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.PressReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Press a key or chord (Enter, Tab, ArrowDown, Control+a)
+      tags:
+      - interact
   /read:
     get:
       produces:
@@ -323,6 +488,22 @@ paths:
       summary: Extract page URL, title, and visible text
       tags:
       - read
+  /reload:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.GotoResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Reload the current page
+      tags:
+      - interact
   /scan:
     get:
       produces:
@@ -339,6 +520,56 @@ paths:
       summary: List actionable elements (assigns refs e1, e2, …)
       tags:
       - read
+  /scroll:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ref or dir+amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.ScrollReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Scroll the page (dir+amount) or an element into view (ref)
+      tags:
+      - interact
+  /select:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ref and values
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.SelectReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Select dropdown option(s) by visible text
+      tags:
+      - interact
   /shutdown:
     post:
       produces:
@@ -400,6 +631,31 @@ paths:
       summary: Current URL, title, and port
       tags:
       - read
+  /type:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: text
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.TypeReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Type text into the focused element
+      tags:
+      - interact
   /upload:
     post:
       consumes:
@@ -423,6 +679,31 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrResp'
       summary: Attach a local file to a file input by ref
+      tags:
+      - interact
+  /wait:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: selector|text|ms (+gone)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.WaitReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Wait for a selector or text, or a fixed delay (ms)
       tags:
       - interact
 swagger: "2.0"

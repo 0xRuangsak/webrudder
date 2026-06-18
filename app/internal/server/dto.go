@@ -80,3 +80,38 @@ type ErrResp struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error" example:"ref \"e9\" not found — re-scan the page"`
 }
+
+type PressReq struct {
+	Key string `json:"key" example:"Enter"`
+}
+
+type TypeReq struct {
+	Text string `json:"text" example:"hello"`
+}
+
+type HoverReq struct {
+	Ref string `json:"ref" example:"e1"`
+}
+
+type ScrollReq struct {
+	Ref    string  `json:"ref,omitempty"`
+	Dir    string  `json:"dir,omitempty" example:"down"`
+	Amount float64 `json:"amount,omitempty"`
+}
+
+type SelectReq struct {
+	Ref    string   `json:"ref" example:"e3"`
+	Values []string `json:"values"`
+}
+
+type CheckReq struct {
+	Ref     string `json:"ref" example:"e4"`
+	Checked bool   `json:"checked" example:"true"`
+}
+
+type WaitReq struct {
+	Selector string `json:"selector,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Ms       int    `json:"ms,omitempty"`
+	Gone     bool   `json:"gone,omitempty"`
+}

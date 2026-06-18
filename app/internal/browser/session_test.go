@@ -32,6 +32,8 @@ const testIndexHTML = `<!doctype html><html><body>
 <input id="f" type="file" accept="image/*">
 <button id="up" onclick="document.getElementById('f').click()">Choose File</button>
 <a id="dl" href="/file.txt" download>Download File</a>
+<input id="cb" type="checkbox" name="agree">
+<select id="sel" name="choice"><option>one</option><option>two</option></select>
 </body></html>`
 
 func testServer() *httptest.Server {
@@ -131,6 +133,62 @@ func TestSessionFunctional(t *testing.T) {
 		t.Error("HTML missing the file input markup")
 	}
 
+	// check (toggle checkbox to checked)
+	var cbRef string
+	for _, e := range els {
+		if e.Type == "checkbox" {
+			cbRef = e.Ref
+			break
+		}
+	}
+	if cbRef == "" {
+		t.Fatal("checkbox not found in scan")
+	}
+	if err := s.SetChecked(cbRef, true); err != nil {
+		t.Fatalf("SetChecked: %v", err)
+	}
+	if !s.page.MustEval(`() => document.getElementById('cb').checked`).Bool() {
+		t.Error("checkbox not checked after SetChecked(true)")
+	}
+
+	// select (pick option by visible text)
+	var selRef string
+	for _, e := range els {
+		if e.Role == "select" {
+			selRef = e.Ref
+			break
+		}
+	}
+	if selRef == "" {
+		t.Fatal("select not found in scan")
+	}
+	if err := s.SelectOption(selRef, []string{"two"}); err != nil {
+		t.Fatalf("SelectOption: %v", err)
+	}
+	if v := s.page.MustEval(`() => document.getElementById('sel').value`).Str(); v != "two" {
+		t.Errorf("select value = %q, want two", v)
+	}
+
+	// hover / scroll / wait / press / type — smoke (no error)
+	if err := s.Hover(cbRef); err != nil {
+		t.Errorf("Hover: %v", err)
+	}
+	if err := s.Scroll("", "down", 100); err != nil {
+		t.Errorf("Scroll: %v", err)
+	}
+	if err := s.Wait("h1", "", 0, false); err != nil {
+		t.Errorf("Wait selector: %v", err)
+	}
+	if err := s.Wait("", "", 30, false); err != nil {
+		t.Errorf("Wait ms: %v", err)
+	}
+	if err := s.Press("Tab"); err != nil {
+		t.Errorf("Press: %v", err)
+	}
+	if err := s.TypeText("x"); err != nil {
+		t.Errorf("TypeText: %v", err)
+	}
+
 	// fill
 	nameRef := refByName(els, "yourname")
 	if nameRef == "" {
@@ -186,5 +244,22 @@ func TestSessionFunctional(t *testing.T) {
 		t.Fatalf("Click(link): %v", err)
 	} else if !cr.Navigated || !strings.Contains(cr.URL, "/next") {
 		t.Errorf("click link: navigated=%v url=%q", cr.Navigated, cr.URL)
+	}
+
+	// back / forward / reload
+	if err := s.Back(); err != nil {
+		t.Fatalf("Back: %v", err)
+	}
+	if u, _ := s.Status(); strings.Contains(u, "/next") {
+		t.Errorf("Back did not leave /next: %s", u)
+	}
+	if err := s.Forward(); err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	if u, _ := s.Status(); !strings.Contains(u, "/next") {
+		t.Errorf("Forward did not return to /next: %s", u)
+	}
+	if err := s.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
 	}
 }

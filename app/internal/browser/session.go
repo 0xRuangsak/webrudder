@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 )
@@ -663,4 +664,216 @@ func (s *Session) Batch(actions []Action) []map[string]any {
 		results = append(results, r)
 	}
 	return results
+}
+
+const waitTimeout = 15 * time.Second
+
+var pressKeys = map[string]input.Key{
+	"enter": input.Enter, "return": input.Enter,
+	"tab": input.Tab, "escape": input.Escape, "esc": input.Escape,
+	"backspace": input.Backspace, "delete": input.Delete, "del": input.Delete,
+	"space": input.Space, "home": input.Home, "end": input.End,
+	"pageup": input.PageUp, "pagedown": input.PageDown,
+	"up": input.ArrowUp, "arrowup": input.ArrowUp,
+	"down": input.ArrowDown, "arrowdown": input.ArrowDown,
+	"left": input.ArrowLeft, "arrowleft": input.ArrowLeft,
+	"right": input.ArrowRight, "arrowright": input.ArrowRight,
+	"a": input.KeyA, "b": input.KeyB, "c": input.KeyC, "d": input.KeyD, "e": input.KeyE,
+	"f": input.KeyF, "g": input.KeyG, "h": input.KeyH, "i": input.KeyI, "j": input.KeyJ,
+	"k": input.KeyK, "l": input.KeyL, "m": input.KeyM, "n": input.KeyN, "o": input.KeyO,
+	"p": input.KeyP, "q": input.KeyQ, "r": input.KeyR, "s": input.KeyS, "t": input.KeyT,
+	"u": input.KeyU, "v": input.KeyV, "w": input.KeyW, "x": input.KeyX, "y": input.KeyY, "z": input.KeyZ,
+	"0": input.Digit0, "1": input.Digit1, "2": input.Digit2, "3": input.Digit3, "4": input.Digit4,
+	"5": input.Digit5, "6": input.Digit6, "7": input.Digit7, "8": input.Digit8, "9": input.Digit9,
+}
+
+var pressMods = map[string]input.Key{
+	"control": input.ControlLeft, "ctrl": input.ControlLeft, "ctl": input.ControlLeft,
+	"shift": input.ShiftLeft, "alt": input.AltLeft, "option": input.AltLeft,
+	"meta": input.MetaLeft, "cmd": input.MetaLeft, "command": input.MetaLeft, "super": input.MetaLeft,
+}
+
+// Press presses a key or chord like "Enter", "Tab", "ArrowDown", "Control+a".
+// Modifiers are held around the final key.
+func (s *Session) Press(combo string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var mods []input.Key
+	var key input.Key
+	var have bool
+	for _, p := range strings.Split(combo, "+") {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" {
+			continue
+		}
+		if m, ok := pressMods[p]; ok {
+			mods = append(mods, m)
+			continue
+		}
+		k, ok := pressKeys[p]
+		if !ok {
+			return fmt.Errorf("unknown key %q", p)
+		}
+		key, have = k, true
+	}
+	if !have {
+		return fmt.Errorf("no key in %q", combo)
+	}
+	if err := s.page.Timeout(actTimeout).KeyActions().Press(mods...).Type(key).Release(mods...).Do(); err != nil {
+		return fmt.Errorf("press: %w", err)
+	}
+	s.settle()
+	s.cacheState()
+	return nil
+}
+
+// TypeText inserts text into the currently focused element. For a specific field
+// prefer Fill (by ref); this types into whatever has focus and does not emit
+// per-key keydown events.
+func (s *Session) TypeText(text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.page.Timeout(actTimeout).InsertText(text); err != nil {
+		return fmt.Errorf("type: %w", err)
+	}
+	return nil
+}
+
+// Back, Forward, Reload navigate browser history.
+func (s *Session) Back() error    { return s.nav(func() error { return s.page.Timeout(navTimeout).NavigateBack() }) }
+func (s *Session) Forward() error { return s.nav(func() error { return s.page.Timeout(navTimeout).NavigateForward() }) }
+func (s *Session) Reload() error  { return s.nav(func() error { return s.page.Timeout(navTimeout).Reload() }) }
+
+func (s *Session) nav(fn func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := fn(); err != nil {
+		return fmt.Errorf("navigate: %w", err)
+	}
+	s.settle()
+	s.cacheState()
+	return nil
+}
+
+// Hover moves the pointer over an element.
+func (s *Session) Hover(ref string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	el, err := s.elem(ref)
+	if err != nil {
+		return err
+	}
+	if err := el.Timeout(actTimeout).Hover(); err != nil {
+		return fmt.Errorf("hover: %w", err)
+	}
+	return nil
+}
+
+// Scroll scrolls an element into view (when ref is set) or the page by amount px
+// in dir (up/down/left/right; default down 500).
+func (s *Session) Scroll(ref, dir string, amount float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ref != "" {
+		el, err := s.elem(ref)
+		if err != nil {
+			return err
+		}
+		if err := el.Timeout(actTimeout).ScrollIntoView(); err != nil {
+			return fmt.Errorf("scroll: %w", err)
+		}
+		return nil
+	}
+	if amount == 0 {
+		amount = 500
+	}
+	var x, y float64
+	switch strings.ToLower(dir) {
+	case "down", "":
+		y = amount
+	case "up":
+		y = -amount
+	case "right":
+		x = amount
+	case "left":
+		x = -amount
+	default:
+		return fmt.Errorf("unknown scroll dir %q", dir)
+	}
+	if err := s.page.Mouse.Scroll(x, y, 1); err != nil {
+		return fmt.Errorf("scroll: %w", err)
+	}
+	return nil
+}
+
+// SelectOption selects dropdown options by visible text.
+func (s *Session) SelectOption(ref string, values []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	el, err := s.elem(ref)
+	if err != nil {
+		return err
+	}
+	if err := el.Timeout(actTimeout).Select(values, true, rod.SelectorTypeText); err != nil {
+		return fmt.Errorf("select: %w", err)
+	}
+	return nil
+}
+
+// SetChecked toggles a checkbox/radio to the desired state (clicks only if needed).
+func (s *Session) SetChecked(ref string, want bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	el, err := s.elem(ref)
+	if err != nil {
+		return err
+	}
+	cur := false
+	if p, e := el.Property("checked"); e == nil {
+		cur = p.Bool()
+	}
+	if cur != want {
+		if err := el.Timeout(actTimeout).Click(proto.InputMouseButtonLeft, 1); err != nil {
+			return fmt.Errorf("check: %w", err)
+		}
+	}
+	return nil
+}
+
+// Wait blocks until a selector/text appears (or a selector goes away when gone),
+// or for ms milliseconds. Bounded so it can't hang indefinitely.
+func (s *Session) Wait(selector, text string, ms int, gone bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ms > 0 {
+		d := time.Duration(ms) * time.Millisecond
+		if d > 60*time.Second {
+			d = 60 * time.Second
+		}
+		time.Sleep(d)
+		return nil
+	}
+	if selector != "" {
+		if gone {
+			el, err := s.page.Timeout(infoTimeout).Element(selector)
+			if err != nil {
+				return nil // already absent
+			}
+			if err := el.Timeout(waitTimeout).WaitInvisible(); err != nil {
+				return fmt.Errorf("wait gone: %w", err)
+			}
+			return nil
+		}
+		if err := rod.Try(func() { s.page.Timeout(waitTimeout).MustElement(selector) }); err != nil {
+			return fmt.Errorf("wait selector: %w", err)
+		}
+		return nil
+	}
+	if text != "" {
+		if err := rod.Try(func() { s.page.Timeout(waitTimeout).MustSearch(text) }); err != nil {
+			return fmt.Errorf("wait text: %w", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("wait needs ms, selector, or text")
 }

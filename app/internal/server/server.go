@@ -103,6 +103,16 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/upload", s.route(http.MethodPost, s.handleUpload))
 	mux.HandleFunc("/download", s.route(http.MethodPost, s.handleDownload))
 	mux.HandleFunc("/batch", s.route(http.MethodPost, s.handleBatch))
+	mux.HandleFunc("/press", s.route(http.MethodPost, s.handlePress))
+	mux.HandleFunc("/type", s.route(http.MethodPost, s.handleType))
+	mux.HandleFunc("/hover", s.route(http.MethodPost, s.handleHover))
+	mux.HandleFunc("/scroll", s.route(http.MethodPost, s.handleScroll))
+	mux.HandleFunc("/select", s.route(http.MethodPost, s.handleSelect))
+	mux.HandleFunc("/check", s.route(http.MethodPost, s.handleCheck))
+	mux.HandleFunc("/wait", s.route(http.MethodPost, s.handleWait))
+	mux.HandleFunc("/back", s.route(http.MethodPost, s.handleBack))
+	mux.HandleFunc("/forward", s.route(http.MethodPost, s.handleForward))
+	mux.HandleFunc("/reload", s.route(http.MethodPost, s.handleReload))
 	mux.HandleFunc("/shutdown", s.route(http.MethodPost, s.handleShutdown))
 	mux.Handle("/swagger/", s.secure(httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json"))))
 	mux.HandleFunc("/", s.secure(s.handleRoot))
@@ -411,6 +421,196 @@ func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 	results := s.sess.Batch(b.Actions)
 	writeJSON(w, http.StatusOK, BatchResp{OK: true, Results: results})
+}
+
+// handlePress presses a key or chord.
+// @Summary  Press a key or chord (Enter, Tab, ArrowDown, Control+a)
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body PressReq true "key"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /press [post]
+func (s *Server) handlePress(w http.ResponseWriter, r *http.Request) {
+	var b PressReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.sess.Press(b.Key); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
+// handleType inserts text into the focused element.
+// @Summary  Type text into the focused element
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body TypeReq true "text"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /type [post]
+func (s *Server) handleType(w http.ResponseWriter, r *http.Request) {
+	var b TypeReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.sess.TypeText(b.Text); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
+// handleHover hovers an element.
+// @Summary  Hover an element by ref
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body HoverReq true "ref"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /hover [post]
+func (s *Server) handleHover(w http.ResponseWriter, r *http.Request) {
+	var b HoverReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.sess.Hover(b.Ref); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
+// handleScroll scrolls the page or an element into view.
+// @Summary  Scroll the page (dir+amount) or an element into view (ref)
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body ScrollReq true "ref or dir+amount"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /scroll [post]
+func (s *Server) handleScroll(w http.ResponseWriter, r *http.Request) {
+	var b ScrollReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.sess.Scroll(b.Ref, b.Dir, b.Amount); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
+// handleSelect selects dropdown options.
+// @Summary  Select dropdown option(s) by visible text
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body SelectReq true "ref and values"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /select [post]
+func (s *Server) handleSelect(w http.ResponseWriter, r *http.Request) {
+	var b SelectReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.sess.SelectOption(b.Ref, b.Values); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
+// handleCheck sets a checkbox/radio state.
+// @Summary  Set a checkbox/radio to checked/unchecked
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body CheckReq true "ref and desired checked state"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /check [post]
+func (s *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
+	var b CheckReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.sess.SetChecked(b.Ref, b.Checked); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
+// handleWait waits for a selector/text/timeout.
+// @Summary  Wait for a selector or text, or a fixed delay (ms)
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body WaitReq true "selector|text|ms (+gone)"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /wait [post]
+func (s *Server) handleWait(w http.ResponseWriter, r *http.Request) {
+	var b WaitReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.sess.Wait(b.Selector, b.Text, b.Ms, b.Gone); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
+// handleBack goes back in history.
+// @Summary  Navigate back
+// @Tags     interact
+// @Produce  json
+// @Success  200 {object} GotoResp
+// @Failure  400 {object} ErrResp
+// @Router   /back [post]
+func (s *Server) handleBack(w http.ResponseWriter, r *http.Request) { s.navResp(w, s.sess.Back) }
+
+// handleForward goes forward in history.
+// @Summary  Navigate forward
+// @Tags     interact
+// @Produce  json
+// @Success  200 {object} GotoResp
+// @Failure  400 {object} ErrResp
+// @Router   /forward [post]
+func (s *Server) handleForward(w http.ResponseWriter, r *http.Request) { s.navResp(w, s.sess.Forward) }
+
+// handleReload reloads the page.
+// @Summary  Reload the current page
+// @Tags     interact
+// @Produce  json
+// @Success  200 {object} GotoResp
+// @Failure  400 {object} ErrResp
+// @Router   /reload [post]
+func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) { s.navResp(w, s.sess.Reload) }
+
+func (s *Server) navResp(w http.ResponseWriter, fn func() error) {
+	if err := fn(); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	u, _ := s.sess.Status()
+	writeJSON(w, http.StatusOK, GotoResp{OK: true, URL: u})
 }
 
 // handleShutdown stops the daemon.

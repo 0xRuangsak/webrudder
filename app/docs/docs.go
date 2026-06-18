@@ -18,6 +18,31 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/back": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Navigate back",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.GotoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/batch": {
             "post": {
                 "consumes": [
@@ -46,6 +71,45 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.BatchResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/check": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Set a checkbox/radio to checked/unchecked",
+                "parameters": [
+                    {
+                        "description": "ref and desired checked state",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.CheckReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
                         }
                     },
                     "400": {
@@ -174,6 +238,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/forward": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Navigate forward",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.GotoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/goto": {
             "post": {
                 "consumes": [
@@ -202,6 +291,45 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.GotoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/hover": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Hover an element by ref",
+                "parameters": [
+                    {
+                        "description": "ref",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.HoverReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
                         }
                     },
                     "400": {
@@ -246,6 +374,45 @@ const docTemplate = `{
                 }
             }
         },
+        "/press": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Press a key or chord (Enter, Tab, ArrowDown, Control+a)",
+                "parameters": [
+                    {
+                        "description": "key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.PressReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/read": {
             "get": {
                 "produces": [
@@ -271,6 +438,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/reload": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Reload the current page",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.GotoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/scan": {
             "get": {
                 "produces": [
@@ -289,6 +481,84 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/scroll": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Scroll the page (dir+amount) or an element into view (ref)",
+                "parameters": [
+                    {
+                        "description": "ref or dir+amount",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.ScrollReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/select": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Select dropdown option(s) by visible text",
+                "parameters": [
+                    {
+                        "description": "ref and values",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.SelectReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/server.ErrResp"
                         }
@@ -392,6 +662,45 @@ const docTemplate = `{
                 }
             }
         },
+        "/type": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Type text into the focused element",
+                "parameters": [
+                    {
+                        "description": "text",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.TypeReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/upload": {
             "post": {
                 "consumes": [
@@ -412,6 +721,45 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/server.UploadReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
+        "/wait": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Wait for a selector or text, or a fixed delay (ms)",
+                "parameters": [
+                    {
+                        "description": "selector|text|ms (+gone)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.WaitReq"
                         }
                     }
                 ],
@@ -504,6 +852,19 @@ const docTemplate = `{
                         "type": "object",
                         "additionalProperties": {}
                     }
+                }
+            }
+        },
+        "server.CheckReq": {
+            "type": "object",
+            "properties": {
+                "checked": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "ref": {
+                    "type": "string",
+                    "example": "e4"
                 }
             }
         },
@@ -604,11 +965,29 @@ const docTemplate = `{
                 }
             }
         },
+        "server.HoverReq": {
+            "type": "object",
+            "properties": {
+                "ref": {
+                    "type": "string",
+                    "example": "e1"
+                }
+            }
+        },
         "server.OKResp": {
             "type": "object",
             "properties": {
                 "ok": {
                     "type": "boolean"
+                }
+            }
+        },
+        "server.PressReq": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "example": "Enter"
                 }
             }
         },
@@ -637,6 +1016,36 @@ const docTemplate = `{
                 }
             }
         },
+        "server.ScrollReq": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "dir": {
+                    "type": "string",
+                    "example": "down"
+                },
+                "ref": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.SelectReq": {
+            "type": "object",
+            "properties": {
+                "ref": {
+                    "type": "string",
+                    "example": "e3"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "server.StatusResp": {
             "type": "object",
             "properties": {
@@ -651,6 +1060,15 @@ const docTemplate = `{
                 }
             }
         },
+        "server.TypeReq": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "example": "hello"
+                }
+            }
+        },
         "server.UploadReq": {
             "type": "object",
             "properties": {
@@ -661,6 +1079,23 @@ const docTemplate = `{
                 "ref": {
                     "type": "string",
                     "example": "e5"
+                }
+            }
+        },
+        "server.WaitReq": {
+            "type": "object",
+            "properties": {
+                "gone": {
+                    "type": "boolean"
+                },
+                "ms": {
+                    "type": "integer"
+                },
+                "selector": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
                 }
             }
         }

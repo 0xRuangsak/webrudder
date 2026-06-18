@@ -129,7 +129,9 @@ Base URL: `http://localhost:<port>`
 | Method & Path | Body | Returns |
 | --- | --- | --- |
 | `GET /scan` | — | actionable elements: `[{ref, role, name, kind?, accept?, href?}]` |
+| `GET /snapshot` | — | accessibility tree (role + name + ARIA state) as text |
 | `GET /read` | — | `{url, title, text}` |
+| `GET /html` | — | raw outer HTML (full page; `?ref=eN` for one element) |
 | `GET /snap` | — | full-page PNG (`curl -o shot.png`); `?full=false` = viewport only |
 | `GET /status` | — | `{url, title, port}` |
 | `POST /click` | `{ref}` | `{ok, navigated?, url?, downloaded?, needs_file?}` |
@@ -138,6 +140,14 @@ Base URL: `http://localhost:<port>`
 | `POST /upload` | `{ref, file}` | `{ok}` — clicks `ref`, intercepts the file chooser, injects `file` |
 | `POST /download` | `{ref, dir?}` | `{ok, saved}` — clicks `ref`, waits for completion, returns the saved path |
 | `POST /batch` | `{actions:[…]}` | `{ok, results:[…]}` — many actions, one request |
+| `POST /press` | `{key}` | press a key/chord (`Enter`, `Tab`, `Control+a`) |
+| `POST /type` | `{text}` | type text into the focused element |
+| `POST /hover` | `{ref}` | hover an element |
+| `POST /scroll` | `{ref?, dir?, amount?}` | element into view, or page scroll (up/down/left/right) |
+| `POST /select` | `{ref, values}` | select dropdown option(s) by visible text |
+| `POST /check` | `{ref, checked}` | set checkbox/radio state |
+| `POST /wait` | `{selector?, text?, ms?, gone?}` | wait for a selector/text, or a delay |
+| `POST /back` `/forward` `/reload` | — | history navigation |
 | `POST /shutdown` | — | stops the daemon and browser |
 
 Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status. The full schema lives in the OpenAPI spec that drives Swagger UI at `/`. `/click` reports `navigated`/`url`, plus `downloaded` (saved path) or `needs_file` when a click triggers a download or opens a file chooser.
