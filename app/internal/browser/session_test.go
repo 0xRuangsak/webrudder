@@ -3,11 +3,20 @@ package browser
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-rod/rod/lib/proto"
 )
+
+func hostOf(rawURL string) string {
+	u, _ := url.Parse(rawURL)
+	return u.Hostname()
+}
 
 func TestValidNavURL(t *testing.T) {
 	ok := []string{"http://example.com", "https://x.io/y", "about:blank", "http://localhost:3000"}
@@ -261,5 +270,64 @@ func TestSessionFunctional(t *testing.T) {
 	}
 	if err := s.Reload(); err != nil {
 		t.Fatalf("Reload: %v", err)
+	}
+}
+
+// TestSessionTier2 covers state save/load, dialog auto-handling, and tabs.
+func TestSessionTier2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("needs a browser; skipped in -short")
+	}
+	ts := testServer()
+	defer ts.Close()
+
+	s, err := New(ts.URL, t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer s.Close()
+
+	// state: restore a cookie, then export it back
+	if err := s.SetState(State{Cookies: []*proto.NetworkCookieParam{
+		{Name: "wr", Value: "42", Domain: hostOf(ts.URL), Path: "/"},
+	}}); err != nil {
+		t.Fatalf("SetState cookie: %v", err)
+	}
+	st, err := s.GetState()
+	if err != nil {
+		t.Fatalf("GetState: %v", err)
+	}
+	found := false
+	for _, c := range st.Cookies {
+		if c.Name == "wr" && c.Value == "42" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("cookie not exported after SetState")
+	}
+
+	// localStorage round-trip (current origin)
+	if err := s.SetState(State{Local: map[string]string{"k": "v"}}); err != nil {
+		t.Fatalf("SetState local: %v", err)
+	}
+	if st2, _ := s.GetState(); st2.Local["k"] != "v" {
+		t.Errorf("localStorage not restored: %v", st2.Local)
+	}
+
+	// dialogs: auto-accept must not hang on alert()
+	s.SetDialog(true, "")
+	done := make(chan error, 1)
+	go func() {
+		_, e := s.page.Timeout(5 * time.Second).Eval(`() => { alert('hi'); return 1 }`)
+		done <- e
+	}()
+	select {
+	case e := <-done:
+		if e != nil {
+			t.Errorf("alert handling failed: %v", e)
+		}
+	case <-time.After(8 * time.Second):
+		t.Error("alert hung — dialog not auto-handled")
 	}
 }

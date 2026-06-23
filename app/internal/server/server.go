@@ -113,6 +113,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/back", s.route(http.MethodPost, s.handleBack))
 	mux.HandleFunc("/forward", s.route(http.MethodPost, s.handleForward))
 	mux.HandleFunc("/reload", s.route(http.MethodPost, s.handleReload))
+	mux.HandleFunc("/state", s.secure(s.handleState))
+	mux.HandleFunc("/dialog", s.route(http.MethodPost, s.handleDialog))
 	mux.HandleFunc("/shutdown", s.route(http.MethodPost, s.handleShutdown))
 	mux.Handle("/swagger/", s.secure(httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json"))))
 	mux.HandleFunc("/", s.secure(s.handleRoot))
@@ -612,6 +614,60 @@ func (s *Server) navResp(w http.ResponseWriter, fn func() error) {
 	u, _ := s.sess.Status()
 	writeJSON(w, http.StatusOK, GotoResp{OK: true, URL: u})
 }
+
+// handleState exports (GET) or restores (POST) the session snapshot.
+// @Summary  Export (GET) / restore (POST) session state — cookies + storage
+// @Tags     read
+// @Produce  json
+// @Success  200 {object} StateDoc
+// @Failure  400 {object} ErrResp
+// @Router   /state [get]
+// @Router   /state [post]
+func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		st, err := s.sess.GetState()
+		if err != nil {
+			fail(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	case http.MethodPost:
+		var st browser.State
+		if err := decode(r, &st); err != nil {
+			fail(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := s.sess.SetState(st); err != nil {
+			fail(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, OKResp{OK: true})
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleDialog sets the JS-dialog answer policy.
+// @Summary  Set how JS dialogs (alert/confirm/prompt) are answered
+// @Tags     interact
+// @Accept   json
+// @Produce  json
+// @Param    body body DialogReq true "accept + optional prompt text"
+// @Success  200 {object} OKResp
+// @Failure  400 {object} ErrResp
+// @Router   /dialog [post]
+func (s *Server) handleDialog(w http.ResponseWriter, r *http.Request) {
+	var b DialogReq
+	if err := decode(r, &b); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	s.sess.SetDialog(b.Accept, b.Text)
+	writeJSON(w, http.StatusOK, OKResp{OK: true})
+}
+
 
 // handleShutdown stops the daemon.
 // @Summary  Stop the daemon and browser

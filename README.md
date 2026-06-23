@@ -148,6 +148,8 @@ Base URL: `http://localhost:<port>`
 | `POST /check` | `{ref, checked}` | set checkbox/radio state |
 | `POST /wait` | `{selector?, text?, ms?, gone?}` | wait for a selector/text, or a delay |
 | `POST /back` `/forward` `/reload` | — | history navigation |
+| `GET` / `POST /state` | `{cookies, local, session}` | export (GET) / restore (POST) the session — login reuse |
+| `POST /dialog` | `{accept, text?}` | how to answer alert/confirm/prompt (auto-handled, never hangs) |
 | `POST /shutdown` | — | stops the daemon and browser |
 
 Responses are JSON. Errors return `{ok:false, error}` with a 4xx/5xx status. The full schema lives in the OpenAPI spec that drives Swagger UI at `/`. `/click` reports `navigated`/`url`, plus `downloaded` (saved path) or `needs_file` when a click triggers a download or opens a file chooser.
@@ -214,6 +216,21 @@ $ curl -X POST localhost:10000/upload -d '{"ref":"e5","file":"./avatar.png"}'
 $ curl -X POST localhost:10000/download -d '{"ref":"e7"}'
 {"ok":true,"saved":"/abs/downloads/report.pdf"}
 ```
+
+---
+
+## Session reuse
+
+Log in once, save the session, reuse it next run — skip 2FA/CAPTCHA:
+
+```console
+$ curl localhost:10000/state > session.json              # after logging in
+
+# ... later, fresh daemon, on the target site:
+$ curl -X POST localhost:10000/state -d @session.json    # restore cookies + storage
+```
+
+webrudder writes nothing to disk — **you** hold `session.json`. JS dialogs (`alert`/`confirm`/`prompt`) are auto-answered (default accept; change with `POST /dialog`) so a page can never hang on one.
 
 ---
 

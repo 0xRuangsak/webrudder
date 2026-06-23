@@ -77,6 +77,25 @@ definitions:
       url:
         type: string
     type: object
+  server.CookieDoc:
+    properties:
+      domain:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      value:
+        type: string
+    type: object
+  server.DialogReq:
+    properties:
+      accept:
+        example: true
+        type: boolean
+      text:
+        type: string
+    type: object
   server.DownloadReq:
     properties:
       dir:
@@ -174,6 +193,21 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  server.StateDoc:
+    properties:
+      cookies:
+        items:
+          $ref: '#/definitions/server.CookieDoc'
+        type: array
+      local:
+        additionalProperties:
+          type: string
+        type: object
+      session:
+        additionalProperties:
+          type: string
+        type: object
     type: object
   server.StatusResp:
     properties:
@@ -308,6 +342,31 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrResp'
       summary: Click an element by ref
+      tags:
+      - interact
+  /dialog:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: accept + optional prompt text
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/server.DialogReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.OKResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Set how JS dialogs (alert/confirm/prompt) are answered
       tags:
       - interact
   /download:
@@ -617,6 +676,37 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrResp'
       summary: Accessibility-tree outline (role + name + ARIA state, as text)
+      tags:
+      - read
+  /state:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.StateDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Export (GET) / restore (POST) session state — cookies + storage
+      tags:
+      - read
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.StateDoc'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrResp'
+      summary: Export (GET) / restore (POST) session state — cookies + storage
       tags:
       - read
   /status:

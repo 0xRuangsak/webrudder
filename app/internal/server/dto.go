@@ -115,3 +115,23 @@ type WaitReq struct {
 	Ms       int    `json:"ms,omitempty"`
 	Gone     bool   `json:"gone,omitempty"`
 }
+
+type DialogReq struct {
+	Accept bool   `json:"accept" example:"true"`
+	Text   string `json:"text,omitempty"`
+}
+
+// StateDoc documents the /state payload for Swagger. The live handler uses
+// browser.State, whose cookies are CDP structs swag can't introspect.
+type StateDoc struct {
+	Cookies []CookieDoc       `json:"cookies"`
+	Local   map[string]string `json:"local"`
+	Session map[string]string `json:"session"`
+}
+
+type CookieDoc struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Domain string `json:"domain,omitempty"`
+	Path   string `json:"path,omitempty"`
+}

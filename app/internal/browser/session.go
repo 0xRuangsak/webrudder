@@ -63,6 +63,11 @@ type Session struct {
 	dlDone  chan string   // a download finished → saved path
 	dlMu    sync.Mutex
 	dlNames map[string]string // download GUID → suggested filename
+
+	dlgMu      sync.Mutex
+	dlgAccept  bool   // how to answer JS dialogs (default accept)
+	dlgText    string // prompt text when accepting
+	lastDialog string
 }
 
 // Element is one actionable node returned by scan.
@@ -131,8 +136,10 @@ func New(entryURL, downloadsDir string) (*Session, error) {
 		dlBegin:   make(chan struct{}, 8),
 		dlDone:    make(chan string, 8),
 		dlNames:   map[string]string{},
+		dlgAccept: true,
 	}
-	s.startWatchers()
+	s.armBrowser()
+	s.armPage(s.page)
 
 	if entryURL != "" {
 		if err := s.Goto(entryURL); err != nil {
@@ -144,24 +151,15 @@ func New(entryURL, downloadsDir string) (*Session, error) {
 	return s, nil
 }
 
-// startWatchers enables file-chooser interception and download events, then
-// spawns goroutines that translate those CDP events into channel signals. The
-// goroutines exit when the page/browser context is cancelled by Close.
-func (s *Session) startWatchers() {
-	_ = proto.PageSetInterceptFileChooserDialog{Enabled: true}.Call(s.page)
+// armBrowser sets the download behavior and watches browser-level download
+// events (saved as GUID, renamed to the suggested filename on completion).
+func (s *Session) armBrowser() {
 	_ = proto.BrowserSetDownloadBehavior{
 		Behavior:         proto.BrowserSetDownloadBehaviorBehaviorAllowAndName,
 		BrowserContextID: s.browser.BrowserContextID,
 		DownloadPath:     s.downloads,
 	}.Call(s.browser)
 
-	// File chooser is a page-level event.
-	go s.page.EachEvent(func(e *proto.PageFileChooserOpened) {
-		signal(s.chooser)
-	})()
-
-	// Download lifecycle is a browser-level event (saved as GUID, renamed to the
-	// suggested filename on completion).
 	go s.browser.EachEvent(
 		func(e *proto.PageDownloadWillBegin) {
 			s.dlMu.Lock()
@@ -193,6 +191,21 @@ func (s *Session) startWatchers() {
 			}
 		},
 	)()
+}
+
+// armPage wires file-chooser interception and JS-dialog auto-handling on a page,
+// once per page. File choosers signal the chooser channel; JS dialogs are
+// answered per the current policy (default accept) so a page never hangs.
+func (s *Session) armPage(p *rod.Page) {
+	_ = proto.PageSetInterceptFileChooserDialog{Enabled: true}.Call(p)
+	go p.EachEvent(func(e *proto.PageFileChooserOpened) { signal(s.chooser) })()
+	go p.EachEvent(func(e *proto.PageJavascriptDialogOpening) {
+		s.dlgMu.Lock()
+		accept, text := s.dlgAccept, s.dlgText
+		s.lastDialog = e.Message
+		s.dlgMu.Unlock()
+		_ = proto.PageHandleJavaScriptDialog{Accept: accept, PromptText: text}.Call(p)
+	})()
 }
 
 func signal(ch chan struct{}) {
@@ -877,3 +890,81 @@ func (s *Session) Wait(selector, text string, ms int, gone bool) error {
 	}
 	return fmt.Errorf("wait needs ms, selector, or text")
 }
+
+// --- dialogs ---
+
+// SetDialog sets how future JS dialogs (alert/confirm/prompt) are answered.
+// Default is accept; dialogs are always auto-handled so the page never hangs.
+func (s *Session) SetDialog(accept bool, text string) {
+	s.dlgMu.Lock()
+	s.dlgAccept, s.dlgText = accept, text
+	s.dlgMu.Unlock()
+}
+
+// --- session state (cookies + storage) ---
+
+// State is a portable session snapshot: cookies plus the current origin's
+// localStorage and sessionStorage. The caller persists it — webrudder writes
+// nothing to disk.
+type State struct {
+	Cookies []*proto.NetworkCookieParam `json:"cookies"`
+	Local   map[string]string           `json:"local"`
+	Session map[string]string           `json:"session"`
+}
+
+// GetState exports cookies + current-origin storage.
+func (s *Session) GetState() (State, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var st State
+	cookies, err := s.browser.GetCookies()
+	if err != nil {
+		return st, fmt.Errorf("cookies: %w", err)
+	}
+	for _, c := range cookies {
+		st.Cookies = append(st.Cookies, &proto.NetworkCookieParam{
+			Name: c.Name, Value: c.Value, Domain: c.Domain, Path: c.Path,
+			Secure: c.Secure, HTTPOnly: c.HTTPOnly, SameSite: c.SameSite, Expires: c.Expires,
+		})
+	}
+	st.Local = s.storageMap("localStorage")
+	st.Session = s.storageMap("sessionStorage")
+	return st, nil
+}
+
+// SetState restores cookies + storage. localStorage/sessionStorage apply to the
+// CURRENT origin — navigate to the target site before calling this.
+func (s *Session) SetState(st State) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(st.Cookies) > 0 {
+		if err := s.browser.SetCookies(st.Cookies); err != nil {
+			return fmt.Errorf("set cookies: %w", err)
+		}
+	}
+	s.writeStorage("localStorage", st.Local)
+	s.writeStorage("sessionStorage", st.Session)
+	return nil
+}
+
+func (s *Session) storageMap(which string) map[string]string {
+	m := map[string]string{}
+	obj, err := s.page.Timeout(actTimeout).Eval(
+		fmt.Sprintf(`() => JSON.stringify(Object.fromEntries(Object.entries(%s)))`, which))
+	if err == nil {
+		_ = json.Unmarshal([]byte(obj.Value.Str()), &m)
+	}
+	return m
+}
+
+func (s *Session) writeStorage(which string, m map[string]string) {
+	if len(m) == 0 {
+		return
+	}
+	data, _ := json.Marshal(m)
+	_, _ = s.page.Timeout(actTimeout).Eval(
+		fmt.Sprintf(`(d) => { const m = JSON.parse(d); for (const k in m) %s.setItem(k, m[k]); }`, which),
+		string(data))
+}
+
+// (multi-tab support intentionally omitted — single-page session by design)

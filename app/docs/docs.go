@@ -160,6 +160,45 @@ const docTemplate = `{
                 }
             }
         },
+        "/dialog": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interact"
+                ],
+                "summary": "Set how JS dialogs (alert/confirm/prompt) are answered",
+                "parameters": [
+                    {
+                        "description": "accept + optional prompt text",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.DialogReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OKResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/download": {
             "post": {
                 "consumes": [
@@ -643,6 +682,54 @@ const docTemplate = `{
                 }
             }
         },
+        "/state": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "Export (GET) / restore (POST) session state — cookies + storage",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.StateDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "read"
+                ],
+                "summary": "Export (GET) / restore (POST) session state — cookies + storage",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.StateDoc"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResp"
+                        }
+                    }
+                }
+            }
+        },
         "/status": {
             "get": {
                 "produces": [
@@ -897,6 +984,35 @@ const docTemplate = `{
                 }
             }
         },
+        "server.CookieDoc": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.DialogReq": {
+            "type": "object",
+            "properties": {
+                "accept": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
         "server.DownloadReq": {
             "type": "object",
             "properties": {
@@ -1041,6 +1157,29 @@ const docTemplate = `{
                 "values": {
                     "type": "array",
                     "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "server.StateDoc": {
+            "type": "object",
+            "properties": {
+                "cookies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.CookieDoc"
+                    }
+                },
+                "local": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "session": {
+                    "type": "object",
+                    "additionalProperties": {
                         "type": "string"
                     }
                 }
